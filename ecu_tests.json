@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "vehicle": "TVS iQube ST",
+  "ecus": [
+    {
+      "ecu_code": "BMS",
+      "ecu_name": "BMS",
+      "description": "Battery Management System ECU",
+      "protocol": "UDS",
+      "emission": "OBDII",
+      "icon": "icons/microchip.svg",
+      "auto_run_programs": [
+        {
+          "program_id": "AUTO_ECU_ACTIVE_CHECK",
+          "program_name": "ECU Active Check",
+          "program_type": "single",
+          "module_name": "ecu_active_check",
+          "function_name": "check_ecu_active",
+          "execution_mode": "single",
+          "display_type": "status",
+          "display_label": "ECU Status",
+          "display_unit": null,
+          "display_pages": ["ecu"],
+          "ecu_targets": ["BMS"],
+          "output_limits": [
+            { 
+              "signal": "is_active", 
+              "lsl": 1, 
+              "usl": 1, 
+              "unit": null 
+            }
+          ],
+          "fallback_action": "warn_and_continue",
+          "fallback_input": null,
+          "log_as_vin": false,
+          "is_required": true,
+          "timeout_sec": 10,
+          "sort_order": 1
+        }
+      ],
+      "is_active": true,
+      "sort_order": 1,
+      "parameters": [
+        {
+          "parameter_code": "LIVE_PARAMETER",
+          "label": "Live Parameters",
+          "description": "Streaming signals like Voltage, Temperature etc.",
+          "icon": "icons/wave-square.svg",
+          "execution_class": "STREAM",
+          "sort_order": 1,
+          "is_active": true
+        },
+        {
+          "parameter_code": "WRITE_DATA_IDENTIFIER",
+          "label": "Write Data Identifier",
+          "description": "Writing data into the ECU ex: VIN, MAC, Date, Time etc.",
+          "icon": "icons/edit.svg",
+          "execution_class": "SINGLE",
+          "sort_order": 2,
+          "is_active": true
+        }
+      ]
+    }
+  ]
+}
