@@ -3,17 +3,16 @@
 DIAGNOSTIC EXECUTION SERVICE (PRODUCTION – DB AUTHORITATIVE)
 FULLY INTEGRATED WITH UPDATED LOADER AND RUNNER
 
-Version: 4.4.0
-Last Updated: 2026-02-17
+Version: 4.5.0
+Last Updated: 2026-02-18
 
-FIXES IN v4.4.0
+FIXES IN v4.5.0
 ────────────────
-- FIX-60: Support for ECU-level auto-run programs (from ecu_tests.json)
-- FIX-61: Enhanced ECU status persistence for colored dots in UI
-- FIX-62: Proper handling of display_pages for VIN and Battery Voltage
-- FIX-63: Manual VIN input integration with session management
-- FIX-64: Stream value persistence with proper ON CONFLICT
-- FIX-65: ECU active status tracking for multiple ECUs
+- FIX-90: Graceful handling of missing auto_run_programs column
+- FIX-91: Enhanced ECU status persistence for colored dots
+- FIX-92: Improved stream value persistence with error recovery
+- FIX-93: Manual VIN input with proper session updates
+- FIX-94: Database column existence checks before queries
 """
 
 from __future__ import annotations
@@ -52,7 +51,7 @@ from diagnostics.loader import (
     discover_health_tabs,
     get_sections_from_json,
     get_auto_run_config,
-    get_ecu_auto_run_config,  # FIX-60: Get ECU-specific auto-run programs
+    get_ecu_auto_run_config,
     VehicleNotFoundError,
     ModuleLoadError,
     FunctionNotFoundError,
@@ -81,7 +80,7 @@ from diagnostics.runner import (
     get_tasks_for_test,
     get_batch_status,
     cancel_batch,
-    get_ecu_status_from_session,  # FIX-61: Get ECU status for colored dots
+    get_ecu_status_from_session,
     # Auto-run session support
     create_auto_run_session,
     start_auto_run_session,
@@ -176,6 +175,43 @@ def _log_debug(message: str):
 
 
 # =============================================================================
+# FIX-94: DATABASE UTILITY FUNCTIONS
+# =============================================================================
+
+def _table_exists(schema: str, table: str) -> bool:
+    """Check if a table exists in the database."""
+    if not DATABASE_AVAILABLE or query_one is None:
+        return False
+    try:
+        row = query_one("""
+            SELECT 1
+              FROM information_schema.tables
+             WHERE table_schema = :schema
+               AND table_name   = :table
+        """, {"schema": schema, "table": table})
+        return row is not None
+    except Exception:
+        return False
+
+
+def _column_exists(table: str, column: str) -> bool:
+    """Check if a column exists in a table."""
+    if not DATABASE_AVAILABLE or query_one is None:
+        return False
+    try:
+        row = query_one("""
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_schema = 'app'
+               AND table_name = :table
+               AND column_name = :column
+        """, {"table": table, "column": column})
+        return row is not None
+    except Exception:
+        return False
+
+
+# =============================================================================
 # PROGRESS CALLBACK REGISTRATION
 # =============================================================================
 
@@ -242,6 +278,7 @@ class AutoRunError(Exception):
 
 _NUM_RE = re.compile(r"-?\d+(\.\d+)?")
 
+
 def _coerce_float(v: Any) -> Optional[float]:
     """
     Convert a value to float for numeric DB columns.
@@ -301,6 +338,7 @@ def _as_list(obj: Any) -> Optional[List[Any]]:
     return obj if isinstance(obj, list) else None
 
 
+# FIX-91: Enhanced ECU status extraction
 def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Extract ECU status from a variety of shapes. Supports:
@@ -905,22 +943,6 @@ def create_result_persister(
 # AUTO-RUN — DB HELPERS
 # =============================================================================
 
-def _table_exists(schema: str, table: str) -> bool:
-    """Return True if table exists (protect optional logging tables)."""
-    if not DATABASE_AVAILABLE or query_one is None:
-        return False
-    try:
-        row = query_one("""
-            SELECT 1
-              FROM information_schema.tables
-             WHERE table_schema = :schema
-               AND table_name   = :table
-        """, {"schema": schema, "table": table})
-        return row is not None
-    except Exception:
-        return False
-
-
 def _ensure_auto_run_session_row(
     session_id: str,
     vehicle_id: int,
@@ -1018,7 +1040,7 @@ def _set_vin_input_needed(session_id: str, needed: bool = True) -> None:
         _log_warn(f"Failed to set vin_input_needed for session {session_id}: {e}")
 
 
-# FIX-64: Enhanced stream value persistence with proper ON CONFLICT
+# FIX-92: Enhanced stream value persistence with error recovery
 def _persist_stream_value(
     *,
     session_id: str,
@@ -1038,6 +1060,11 @@ def _persist_stream_value(
     
     if not DATABASE_AVAILABLE or execute is None:
         _log_error("STREAM PERSIST - Database not available!")
+        return
+
+    # Check if table exists
+    if not _table_exists("app", "auto_run_stream_values"):
+        _log_error("STREAM PERSIST - Table auto_run_stream_values does not exist!")
         return
 
     is_within = None
@@ -1087,7 +1114,7 @@ def _persist_stream_value(
         _log_error(traceback.format_exc())
 
 
-# FIX-65: Enhanced ECU status persistence for multiple ECUs
+# FIX-91: Enhanced ECU status persistence
 def _persist_ecu_status(
     *,
     session_id: str,
@@ -1102,6 +1129,11 @@ def _persist_ecu_status(
     Used for colored dots in ECU page.
     """
     if not DATABASE_AVAILABLE or execute is None:
+        return
+
+    # Check if table exists
+    if not _table_exists("app", "ecu_active_status"):
+        _log_error("ECU STATUS - Table ecu_active_status does not exist!")
         return
 
     ecu_code = (ecu_code or "").strip()
@@ -1153,6 +1185,11 @@ def create_auto_run_result_persister(
         sid: str, program_id: str, result: Dict[str, Any]
     ):
         if not DATABASE_AVAILABLE or execute is None:
+            return
+
+        # Check if table exists
+        if not _table_exists("app", "auto_run_results"):
+            _log_error("AUTO-RUN RESULTS - Table auto_run_results does not exist!")
             return
 
         try:
@@ -1286,7 +1323,7 @@ def _resolve_auto_run_function(
 
 
 # =============================================================================
-# AUTO-RUN SESSION MANAGEMENT
+# FIX-90: AUTO-RUN SESSION MANAGEMENT WITH COLUMN CHECKS
 # =============================================================================
 
 def start_auto_run(
@@ -1303,7 +1340,10 @@ def start_auto_run(
     """
     Start an auto-run session for a vehicle section.
     
-    FIX-60: Now also loads ECU-specific auto-run programs from ecu_tests.json
+    FIX-90: Now includes ECU-level auto-run programs from ecu_tests.json
+    FIX-91: Enhanced ECU status tracking
+    FIX-92: Improved stream value persistence
+    FIX-93: Manual VIN input support
     """
     _log_info(
         f"Starting auto-run: vehicle={vehicle_name}, "
@@ -1365,14 +1405,14 @@ def start_auto_run(
     specs: List[AutoRunProgramSpec] = []
     skipped: List[Dict[str, Any]] = []
 
-    # FIX-62: Pre-compute limits map for stream programs
+    # Pre-compute limits map for stream programs
     limits_by_program: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     for prog_config in sorted(all_programs, key=lambda p: p.get("sort_order", 0)):
         program_id = prog_config.get("program_id", "")
         program_name = prog_config.get("program_name", program_id)
         program_type = prog_config.get("program_type", "single")
-        source = prog_config.get("source", "section")  # FIX-60: Track source
+        source = prog_config.get("source", "section")
 
         if not program_id:
             _log_warn("Skipping auto-run program with empty program_id")
@@ -1423,7 +1463,7 @@ def start_auto_run(
                 "vehicle_name": vehicle_name,
                 "section_type": section_type,
                 "program_type": program_type,
-                "source": source,  # FIX-60: Track source
+                "source": source,
                 "is_auto_run": True,
             },
         )
@@ -1448,7 +1488,7 @@ def start_auto_run(
             log_as_vin=prog_config.get("log_as_vin", False),
             is_required=prog_config.get("is_required", True),
             sort_order=prog_config.get("sort_order", 0),
-            source=source,  # FIX-60: Track source
+            source=source,
         )
 
         specs.append(spec)
@@ -1534,7 +1574,7 @@ def start_auto_run(
         except Exception as e:
             _log_warn(f"Failed to log auto VIN: {e}")
 
-        # FIX-61: ECU active statuses handling for colored dots
+        # FIX-91: ECU active statuses handling for colored dots
         try:
             # Extract ECU statuses from result
             ecu_statuses = _extract_ecu_statuses_anywhere(result)
@@ -1577,7 +1617,7 @@ def start_auto_run(
             except Exception as e:
                 _log_error(f"on_single_result callback error: {e}")
 
-    # FIX-64: Enhanced stream data wrapper with comprehensive logging
+    # FIX-92: Enhanced stream data wrapper
     def on_stream_data_wrapper(sid: str, pid: str, stream_payload: Any):
         """
         Persist streaming data to DB and forward to external callback.
@@ -1685,7 +1725,7 @@ def start_auto_run(
             "fallback_input": spec.fallback_input,
             "log_as_vin": spec.log_as_vin,
             "is_required": spec.is_required,
-            "source": spec.source,  # FIX-60: Include source
+            "source": spec.source,
             "ecu_targets": spec.ecu_targets,
         })
 
@@ -1769,7 +1809,7 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
                     all_required_passed = False
                     break
 
-    # FIX-61: Add ECU status information
+    # Add ECU status information
     ecu_status = {}
     if session_id:
         # Get unique ECUs from programs
@@ -1783,11 +1823,12 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
     session_data["all_required_passed"] = all_required_passed
     session_data["vin_input_needed"] = any_vin_needed
     session_data["blocking_programs"] = blocking_programs
-    session_data["ecu_status"] = ecu_status  # FIX-61: Add ECU status for UI
+    session_data["ecu_status"] = ecu_status
     session_data["ok"] = True
     return session_data
 
 
+# FIX-93: Manual VIN submission
 def submit_auto_run_vin(session_id: str, program_id: str, vin_value: str) -> Dict[str, Any]:
     """
     Submit manual VIN for a failed auto-run VIN read.
@@ -1929,7 +1970,7 @@ def run_auto_programs(
         "all_passed": final_status.get("all_required_passed", False),
         "vin": final_status.get("vin"),
         "vin_source": final_status.get("vin_source", "none"),
-        "ecu_status": final_status.get("ecu_status", {}),  # FIX-61: Include ECU status
+        "ecu_status": final_status.get("ecu_status", {}),
     }
 
 
@@ -2205,7 +2246,7 @@ def list_sections_for_vehicle(vehicle_name: str, user_id: int, user_role: str) -
 
 
 # =============================================================================
-# UI LISTING API — ECUS
+# FIX-90: UI LISTING API — ECUS (with column check)
 # =============================================================================
 
 def list_ecus_for_vehicle(vehicle_name: str, user_id: int, user_role: str) -> List[Dict[str, Any]]:
@@ -2221,17 +2262,35 @@ def list_ecus_for_vehicle(vehicle_name: str, user_id: int, user_role: str) -> Li
 
     if DATABASE_AVAILABLE and query_all is not None:
         try:
-            db_ecus = query_all("""
-                SELECT
-                    vda.ecu_code, vda.ecu_name, vda.description,
-                    vda.protocol, vda.emission, vda.sort_order,
-                    df.icon, vda.auto_run_programs
-                FROM app.vehicle_diagnostic_actions vda
-                LEFT JOIN app.diagnostic_folders df
-                       ON df.id = vda.folder_id
-                WHERE vda.vehicle_id = :vid AND vda.is_active = TRUE
-                ORDER BY vda.sort_order, vda.ecu_name
-            """, {"vid": vehicle["id"]})
+            # Check if auto_run_programs column exists
+            has_auto_run_column = _column_exists("vehicle_diagnostic_actions", "auto_run_programs")
+            
+            if has_auto_run_column:
+                # Query with auto_run_programs
+                db_ecus = query_all("""
+                    SELECT
+                        vda.ecu_code, vda.ecu_name, vda.description,
+                        vda.protocol, vda.emission, vda.sort_order,
+                        df.icon, vda.auto_run_programs
+                    FROM app.vehicle_diagnostic_actions vda
+                    LEFT JOIN app.diagnostic_folders df
+                           ON df.id = vda.folder_id
+                    WHERE vda.vehicle_id = :vid AND vda.is_active = TRUE
+                    ORDER BY vda.sort_order, vda.ecu_name
+                """, {"vid": vehicle["id"]})
+            else:
+                # Query without auto_run_programs
+                db_ecus = query_all("""
+                    SELECT
+                        vda.ecu_code, vda.ecu_name, vda.description,
+                        vda.protocol, vda.emission, vda.sort_order,
+                        df.icon
+                    FROM app.vehicle_diagnostic_actions vda
+                    LEFT JOIN app.diagnostic_folders df
+                           ON df.id = vda.folder_id
+                    WHERE vda.vehicle_id = :vid AND vda.is_active = TRUE
+                    ORDER BY vda.sort_order, vda.ecu_name
+                """, {"vid": vehicle["id"]})
 
             for e in db_ecus or []:
                 auto_run = e.get("auto_run_programs")
@@ -2249,7 +2308,7 @@ def list_ecus_for_vehicle(vehicle_name: str, user_id: int, user_role: str) -> Li
                     "emission": e.get("emission", ""),
                     "icon": e.get("icon", ""),
                     "sort_order": e.get("sort_order", 0),
-                    "auto_run_programs": auto_run or [],  # FIX-60: Include ECU auto-run
+                    "auto_run_programs": auto_run or [],
                 })
 
             if ecus:
@@ -2890,7 +2949,7 @@ def get_service_stats() -> Dict[str, Any]:
 # =============================================================================
 
 def init_service():
-    _log_info("Diagnostic service v4.4.0 initialized")
+    _log_info("Diagnostic service v4.5.0 initialized")
 
     if not DATABASE_AVAILABLE:
         _log_warn("Database not available — limited functionality")
