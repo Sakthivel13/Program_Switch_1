@@ -3,16 +3,14 @@
 DIAGNOSTIC TEST EXECUTION RUNNER (PRODUCTION – DB-AWARE, DB-AGNOSTIC)
 FULLY INTEGRATED WITH UPDATED LOADER AND SERVICE
 
-Version: 3.6.0
-Last Updated: 2026-02-17
+Version: 3.6.1
+Last Updated: 2026-02-18
 
-FIXES IN v3.6.0
+FIXES IN v3.6.1
 ────────────────
-- FIX-50: Support for ECU-level auto-run programs (from ecu_tests.json)
-- FIX-51: Enhanced stream callback chain for Battery Voltage
-- FIX-52: ECU status persistence for colored dots in UI
-- FIX-53: Proper handling of display_pages for VIN and Battery Voltage
-- FIX-54: Manual VIN input integration with session management
+- FIX-76: Enhanced error handling for ECU Active Check
+- FIX-77: Better debug logging for auto-run programs
+- FIX-78: Improved ECU status extraction for colored dots
 """
 
 from __future__ import annotations
@@ -825,7 +823,7 @@ def _execute_stream_function(
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
 
-    # FIX-51: Store stream callback locally to ensure it's preserved
+    # Store stream callback locally to ensure it's preserved
     stream_callback = ctx.stream_callback
     _LOG_STREAM.append(task_id, f"STREAM DEBUG - Initial stream callback present: {stream_callback is not None}")
 
@@ -1761,7 +1759,7 @@ def cancel_batch(batch_id: str) -> bool:
 
 
 # =============================================================================
-# AUTO-RUN HELPER: ECU STATUS EXTRACTION (FIX-52 ENHANCED)
+# AUTO-RUN HELPER: ECU STATUS EXTRACTION (FIX-78 ENHANCED)
 # =============================================================================
 
 def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
@@ -1826,7 +1824,7 @@ def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
 
 
 # =============================================================================
-# AUTO-RUN HELPER: VALUE EXTRACTION (FIX-53 ENHANCED)
+# AUTO-RUN HELPER: VALUE EXTRACTION
 # =============================================================================
 
 def _extract_result_value(output: Any) -> Optional[str]:
@@ -1885,7 +1883,7 @@ def _extract_result_value(output: Any) -> Optional[str]:
 
 
 # =============================================================================
-# PUBLIC API — AUTO-RUN SESSIONS (VIN SUPPORT)
+# PUBLIC API — AUTO-RUN SESSIONS
 # =============================================================================
 
 @dataclass
@@ -1908,7 +1906,6 @@ class AutoRunProgramSpec:
     log_as_vin: bool = False
     is_required: bool = True
     sort_order: int = 0
-    # FIX-50: Source of program (section or ecu)
     source: str = "section"  # "section" or "ecu"
 
 
@@ -1933,7 +1930,7 @@ class AutoRunResult:
     fallback_input: Optional[Dict[str, Any]] = None
     log_as_vin: bool = False
     is_required: bool = True
-    source: str = "section"  # FIX-50: Track source
+    source: str = "section"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1971,7 +1968,6 @@ class AutoRunSession:
     status: str = "started"
     task_ids: Dict[str, str] = field(default_factory=dict)
     streams_started: bool = False
-    # FIX-50: Track ECU-specific programs separately
     ecu_programs: Dict[str, List[str]] = field(default_factory=dict)  # ecu_code -> [program_ids]
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -2230,7 +2226,7 @@ def start_auto_run_session(
             for prog in stream_programs:
                 _log_info(f"  Auto-run stream: {prog.program_name} (source={prog.source})")
 
-                # FIX-51: Preserve existing callback and chain with new one
+                # Preserve existing callback and chain with new one
                 existing_cb = prog.ctx.stream_callback
 
                 def make_stream_cb(p_id: str, existing: Optional[Callable] = None):
@@ -2345,7 +2341,7 @@ def get_auto_run_session(session_id: str) -> Optional[Dict[str, Any]]:
 
 def get_ecu_status_from_session(session_id: str, ecu_code: str) -> Optional[Dict[str, Any]]:
     """
-    FIX-52: Get ECU status for colored dots in UI.
+    FIX-78: Get ECU status for colored dots in UI.
     """
     with _AUTO_RUN_LOCK:
         session = _AUTO_RUN_SESSIONS.get(session_id)
@@ -2623,7 +2619,7 @@ class StreamingTestController:
 
 def _init_runner():
     """Initialize the runner module."""
-    _log_info(f"Runner v3.6.0 max_tasks={MAX_CONCURRENT_TASKS}")
+    _log_info(f"Runner v3.6.1 max_tasks={MAX_CONCURRENT_TASKS}")
     _log_info(f"Modes: {[m.value for m in ExecutionMode]}")
 
 
@@ -2643,7 +2639,7 @@ __all__ = [
     "create_auto_run_session",
     "start_auto_run_session",
     "get_auto_run_session",
-    "get_ecu_status_from_session",  # NEW: Get ECU status for colored dots
+    "get_ecu_status_from_session",
     "submit_manual_vin",
     "stop_auto_run_session",
     "cleanup_auto_run_sessions",
