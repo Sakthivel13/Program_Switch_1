@@ -115,18 +115,33 @@
     border-radius: 50%;
     margin-left: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    animation: pulse 2s infinite;
   }
   .ecu-status-dot.active {
     background: #10b981;
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    animation: pulse-green 2s infinite;
   }
   .ecu-status-dot.inactive {
     background: #ef4444;
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+    animation: pulse-red 2s infinite;
   }
   .ecu-status-dot.unknown {
     background: #9ca3af;
     box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.2);
+  }
+
+  @keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+
+  @keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
   }
 
   /* ===================== GRID LIST (CARDS) ===================== */
@@ -159,6 +174,7 @@
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
+    position: relative;
   }
   .tile:hover{
     border-color:#3b82f6;
@@ -479,7 +495,9 @@
 {% set _vin = current_vin|default('') %}
 {% set _auto_run_session_id = auto_run_session_id|default('') %}
 
-{# Vehicle hero visible for all pages - VIN shows based on display_pages #}
+<!-- ====================================================================== -->
+<!-- VEHICLE HERO STRIP (Shows on all pages)                               -->
+<!-- ====================================================================== -->
 <div class="row justify-content-center mb-3">
   <div class="col-11 col-xl-10">
     <div class="rounded-strip card-shadow vehicle-hero">
@@ -860,6 +878,7 @@
 <!-- MODALS                                                                 -->
 <!-- ====================================================================== -->
 
+<!-- Auto-Run Progress Modal -->
 <div class="modal fade" id="autoRunModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
@@ -883,6 +902,7 @@
   </div>
 </div>
 
+<!-- Manual VIN Input Modal -->
 <div class="modal fade" id="vinManualModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -909,6 +929,7 @@
   </div>
 </div>
 
+<!-- Scan Modal -->
 <div class="modal fade" id="scanModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1068,7 +1089,7 @@
 {# ====================================================================== #}
 {% if model_name and _auto_run_session_id %}
 <script>
-// FIX-61: ECU Status Polling for Colored Dots
+// FIX-91: ECU Status Polling for Colored Dots
 const AUTO_RUN_SESSION_ID = "{{ _auto_run_session_id }}";
 
 async function pollEcuStatus() {
@@ -1086,6 +1107,12 @@ async function pollEcuStatus() {
                     dot.title = `ECU ${stat.is_active ? 'Active' : 'Inactive'} - Last response: ${stat.last_response || 'Never'}`;
                 });
             });
+            
+            // Also update any ECU tiles that might have been added dynamically
+            const ecuTiles = document.querySelectorAll('.js-ecu-tile');
+            if (ecuTiles.length > 0) {
+                console.log(`Updated ${data.status.length} ECU status dots`);
+            }
         }
     } catch (e) {
         console.error('Failed to poll ECU status:', e);
@@ -1094,7 +1121,8 @@ async function pollEcuStatus() {
 
 // Poll every 2 seconds
 if (AUTO_RUN_SESSION_ID) {
-    pollEcuStatus();
+    // Initial poll after a short delay to allow page to load
+    setTimeout(pollEcuStatus, 500);
     setInterval(pollEcuStatus, 2000);
 }
 </script>
@@ -1712,17 +1740,16 @@ if (AUTO_RUN_SESSION_ID) {
 (function(){
   const AUTO_RUN_SESSION_ID = "{{ _auto_run_session_id }}";
   
-  async function apiRunEcuAutoRun() {
-    // ECU-level auto-run is triggered by the backend when the page loads
-    // We just need to poll for ECU status
-    if (AUTO_RUN_SESSION_ID) {
-      // ECU status will be polled by the global ECU status script
-      console.log('ECU page loaded with session:', AUTO_RUN_SESSION_ID);
-    }
-  }
-
+  // ECU-level auto-run is triggered by the backend when the page loads
+  // The ECU status dots are updated by the global ECU status polling script
+  console.log('ECU page loaded with session:', AUTO_RUN_SESSION_ID);
+  
+  // Show loading indicator for ECU status
   document.addEventListener("DOMContentLoaded", () => {
-    apiRunEcuAutoRun();
+    const ecuDots = document.querySelectorAll('.js-ecu-status');
+    ecuDots.forEach(dot => {
+      dot.style.display = "inline-block";
+    });
   });
 })();
 </script>
@@ -1732,8 +1759,8 @@ if (AUTO_RUN_SESSION_ID) {
 {# TEST SEQUENCE PAGE SCRIPT (parameter selected)                          #}
 {# Full support for: LIVE, stream, WDI, IO toggle, routine, DTC, Flashing, IUPR #}
 {# Includes scan preview + backend fallback                                #}
-{# FIX-62: Added stream values polling and display                         #}
-{# FIX-63: Enhanced auto-run session handling with VIN display             #}
+{# FIX-92: Added stream values polling and display                         #}
+{# FIX-93: Enhanced auto-run session handling with VIN display             #}
 {# ====================================================================== #}
 {% if model_name and parameter %}
 <script>
@@ -3451,7 +3478,7 @@ async function loadTests(){
   return true;
 }
 
-/* ===================== Stream values polling ===================== */
+/* ===================== FIX-92: Stream values polling ===================== */
 async function pollStreamValues() {
   if (!AUTO_RUN_SESSION_ID) return;
   
@@ -3517,7 +3544,7 @@ async function pollStreamValues() {
   }
 }
 
-/* ===================== INIT ===================== */
+/* ===================== FIX-93: INIT ===================== */
 document.addEventListener("DOMContentLoaded", async () => {
   setupLogButtons();
   updateLogStats();
