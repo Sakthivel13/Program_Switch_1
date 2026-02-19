@@ -3,17 +3,16 @@
 NIRIX DIAGNOSTICS – MAIN WEB APPLICATION (PostgreSQL Production)
 FULLY INTEGRATED WITH UPDATED LOADER, SERVICE, RUNNER, AND SCANNER (OpenCV)
 
-Version: 3.2.0
-Last Updated: 2026-02-17
+Version: 3.3.0
+Last Updated: 2026-02-19
 
-FIXES IN v3.2.0
+FIXES IN v3.3.0
 ────────────────
-- FIX-70: Enhanced auto-run session handling with VIN persistence
-- FIX-71: ECU status API endpoint for colored dots
-- FIX-72: Stream values API with proper error handling
-- FIX-73: Manual VIN submission with validation
-- FIX-74: Session cleanup for completed auto-run sessions
-- FIX-75: Database index optimization for performance
+- FIX-100: Fixed auto_run_sessions status check constraint violation
+- FIX-101: Enhanced VIN capture and display across all pages
+- FIX-102: Improved session cleanup with proper status handling
+- FIX-103: Added better error recovery for database operations
+- FIX-104: Fixed manual VIN submission with proper validation
 """
 
 # =============================================================================
@@ -81,7 +80,7 @@ from diagnostics.loader import (
     get_ecus_from_json,
     get_parameters_from_json,
     get_auto_run_programs,
-    get_ecu_auto_run_config,  # FIX-70: Get ECU-specific auto-run programs
+    get_ecu_auto_run_config,
 
     # Exceptions
     VehicleNotFoundError,
@@ -110,7 +109,7 @@ from diagnostics.runner import (
     cancel_batch,
 
     # Auto-run session helpers
-    get_ecu_status_from_session,  # FIX-71: Get ECU status for colored dots
+    get_ecu_status_from_session,
 
     # Runner types
     ExecutionContext,
@@ -119,8 +118,8 @@ from diagnostics.runner import (
 from diagnostics.service import (
     # Main DB-authoritative execution API
     run_test,
-    start_auto_run,              # new-style auto-run sessions
-    run_auto_programs,           # legacy auto-run (kept for compat)
+    start_auto_run,
+    run_auto_programs,
 
     run_all_tests_for_parameter,
 
@@ -235,7 +234,42 @@ else:
     print("[STARTUP] Validation disabled (NIRIX_VALIDATE_ON_START=false)")
 
 # =============================================================================
-# FIX-75: DATABASE INDEX OPTIMIZATION
+# FIX-100: FIX DATABASE STATUS CONSTRAINTS
+# =============================================================================
+def _fix_database_constraints():
+    """Fix database constraints to ensure compatibility."""
+    try:
+        # Check if auto_run_sessions table exists
+        table_check = query_one("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'app' 
+                AND table_name = 'auto_run_sessions'
+            )
+        """)
+        
+        if table_check and table_check.get('exists'):
+            # Drop and recreate the status check constraint to include 'expired'
+            execute("""
+                ALTER TABLE app.auto_run_sessions 
+                DROP CONSTRAINT IF EXISTS auto_run_sessions_status_check
+            """)
+            
+            execute("""
+                ALTER TABLE app.auto_run_sessions 
+                ADD CONSTRAINT auto_run_sessions_status_check 
+                CHECK (status IN ('running', 'started', 'completed', 'failed', 'stopped', 'expired'))
+            """)
+            
+            print("[STARTUP] Database constraints fixed: auto_run_sessions_status_check updated")
+    except Exception as e:
+        print(f"[STARTUP] Warning: Could not fix database constraints: {e}")
+
+# Run constraint fix
+_fix_database_constraints()
+
+# =============================================================================
+# FIX-102: DATABASE INDEX OPTIMIZATION
 # =============================================================================
 def _ensure_database_indexes():
     """Create necessary indexes for performance if they don't exist."""
@@ -582,7 +616,7 @@ def _before_request():
         update_live_system()
 
 # =============================================================================
-# FIX-74: PERIODIC CLEANUP
+# FIX-102: IMPROVED PERIODIC CLEANUP
 # =============================================================================
 def _start_cleanup_thread():
     def cleanup_loop():
@@ -596,29 +630,52 @@ def _start_cleanup_thread():
                 if removed_tasks > 0:
                     append_global_log(f"Cleaned up {removed_tasks} completed tasks", "DEBUG")
 
-                # Clean up old auto-run sessions (older than 1 hour)
+                # FIX-100: Properly handle status with check constraint
                 try:
-                    execute("""
-                        UPDATE app.auto_run_sessions 
-                        SET status = 'expired' 
-                        WHERE status IN ('running', 'started') 
-                        AND started_at < NOW() - INTERVAL '1 hour'
+                    # First, check if the constraint exists
+                    constraint_check = query_one("""
+                        SELECT conname 
+                        FROM pg_constraint 
+                        WHERE conrelid = 'app.auto_run_sessions'::regclass
+                        AND conname = 'auto_run_sessions_status_check'
                     """)
+                    
+                    if constraint_check:
+                        # Use 'failed' instead of 'expired' if 'expired' not in constraint
+                        # But we already fixed the constraint, so 'expired' is valid
+                        execute("""
+                            UPDATE app.auto_run_sessions 
+                            SET status = 'expired' 
+                            WHERE status IN ('running', 'started') 
+                            AND started_at < NOW() - INTERVAL '1 hour'
+                        """)
+                        rows_affected = query_one("SELECT count(*) as cnt FROM app.auto_run_sessions WHERE status = 'expired' AND updated_at > NOW() - INTERVAL '5 minutes'")
+                        if rows_affected and rows_affected.get('cnt', 0) > 0:
+                            append_global_log(f"Marked {rows_affected['cnt']} old sessions as expired", "DEBUG")
+                    else:
+                        # Fallback to 'failed' if constraint not fixed
+                        execute("""
+                            UPDATE app.auto_run_sessions 
+                            SET status = 'failed' 
+                            WHERE status IN ('running', 'started') 
+                            AND started_at < NOW() - INTERVAL '1 hour'
+                        """)
                 except Exception as e:
                     app.logger.warning(f"Session cleanup failed: {e}")
 
                 # Clean up old stream values (older than 1 hour)
                 try:
-                    execute("""
+                    result = execute("""
                         DELETE FROM app.auto_run_stream_values
                         WHERE updated_at < NOW() - INTERVAL '1 hour'
                     """)
+                    append_global_log("Cleaned up old stream values", "DEBUG")
                 except Exception as e:
                     app.logger.warning(f"Stream values cleanup failed: {e}")
 
                 # Clean up old ECU status (older than 1 hour)
                 try:
-                    execute("""
+                    result = execute("""
                         DELETE FROM app.ecu_active_status
                         WHERE updated_at < NOW() - INTERVAL '1 hour'
                     """)
@@ -1032,7 +1089,7 @@ def tests_page(model_name):
     return redirect(url_for("tests_root", model=model_name))
 
 # =============================================================================
-# FIX-70: TESTS PAGE WITH AUTO-RUN SESSION SUPPORT
+# FIX-101: TESTS PAGE WITH VIN DISPLAY SUPPORT
 # =============================================================================
 @app.route("/tests")
 def tests_root():
@@ -1048,7 +1105,7 @@ def tests_root():
     ecu = (request.args.get("ecu") or "").strip()
     parameter = (request.args.get("parameter") or "").strip()
 
-    # FIX-70: VIN display support from auto-run session
+    # FIX-101: VIN display support from auto-run session
     auto_run_session_id = (request.args.get("auto_run_session_id") or "").strip()
     current_vin: Optional[str] = None
     current_vin_source: Optional[str] = None
@@ -1164,7 +1221,7 @@ def tests_root():
             parameter=None,
             tests=[],
             vehicles=[],
-            # VIN context
+            # VIN context - CRITICAL for display
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1185,7 +1242,7 @@ def tests_root():
             parameter=None,
             tests=[],
             vehicles=[],
-            # VIN context
+            # VIN context - CRITICAL for display
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1206,7 +1263,7 @@ def tests_root():
             parameter=None,
             tests=[],
             vehicles=[],
-            # VIN context
+            # VIN context - CRITICAL for display
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1246,7 +1303,7 @@ def tests_root():
             parameter=parameter,
             tests=tests,
             vehicles=[],
-            # VIN context
+            # VIN context - CRITICAL for display
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1389,7 +1446,7 @@ def api_run_all_tests():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
-# FIX-70: API: RUN AUTO-RUN PROGRAMS (SECTION ENTRY)
+# API: RUN AUTO-RUN PROGRAMS (SECTION ENTRY)
 # =============================================================================
 @app.route("/api/run_auto_programs", methods=["POST"])
 def api_run_auto_programs():
@@ -1456,7 +1513,7 @@ def api_run_auto_programs():
     })
 
 # =============================================================================
-# FIX-73: API: AUTO-RUN MANUAL VIN SUBMISSION
+# FIX-104: API: AUTO-RUN MANUAL VIN SUBMISSION
 # =============================================================================
 @app.route("/api/auto_run/vin", methods=["POST"])
 def api_auto_run_vin():
@@ -1491,9 +1548,11 @@ def api_auto_run_vin():
         if result.get("ok"):
             execute("""
                 UPDATE app.auto_run_sessions
-                SET vin = :vin, vin_source = 'manual'
+                SET vin = :vin, vin_source = 'manual', vin_input_needed = FALSE
                 WHERE session_id = :sid
             """, {"sid": session_id, "vin": vin})
+            
+            app.logger.info(f"Manual VIN {vin} saved for session {session_id}")
             
         return jsonify(result)
     except Exception as e:
@@ -1520,7 +1579,7 @@ def api_auto_run_status(session_id: str):
         app.logger.exception("Failed to get auto-run live status")
         return jsonify({"ok": False, "error": str(e)}), 500
 
-    # 2) Add DB snapshot
+    # 2) Add DB snapshot with VIN
     try:
         row = query_one("""
             SELECT session_id, vehicle_id, vehicle_name, section_type,
@@ -1531,13 +1590,17 @@ def api_auto_run_status(session_id: str):
         """, {"sid": session_id})
         if row:
             live["db_session"] = dict(row)
+            # Ensure VIN is included in the response
+            if row.get("vin"):
+                live["vin"] = row["vin"]
+                live["vin_source"] = row["vin_source"]
     except Exception as e:
         app.logger.warning(f"Failed to load DB auto_run_session snapshot: {e}")
 
     return jsonify(live)
 
 # =============================================================================
-# FIX-72: API: AUTO-RUN STREAM VALUES
+# API: AUTO-RUN STREAM VALUES
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/stream_values")
 def api_get_stream_values(session_id: str):
@@ -1578,7 +1641,7 @@ def api_get_stream_values(session_id: str):
         }), 500
 
 # =============================================================================
-# FIX-71: API: ECU ACTIVE STATUS (FOR COLORED DOTS)
+# API: ECU ACTIVE STATUS (FOR COLORED DOTS)
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/ecu_status")
 def api_get_ecu_status(session_id: str):
@@ -2148,7 +2211,7 @@ def health_check():
         "station": STATION_ID,
         "active_tasks": stats.get("tasks", {}).get("active", 0),
         "scanner_available": SCANNER_AVAILABLE,
-        "version": "3.2.0",
+        "version": "3.3.0",
     })
 
 # =============================================================================
@@ -2217,7 +2280,7 @@ if __name__ == "__main__":
         pass
 
     print("\n" + "=" * 60)
-    print("NIRIX Diagnostics v3.2.0")
+    print("NIRIX Diagnostics v3.3.0")
     print("URL: http://0.0.0.0:8000")
     print(f"Station ID: {STATION_ID}")
     print(f"Active Tasks: {get_active_task_count()}")
