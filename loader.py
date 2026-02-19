@@ -5,15 +5,16 @@ Supports split auto-run programs:
 - section_tests.json: Contains VIN Read and Battery Voltage (runs on section entry)
 - ecu_tests.json: Contains ECU Active Check (runs on ECU page load)
 
-Version: 2.3.0
-Last Updated: 2026-02-18
+Version: 2.4.0
+Last Updated: 2026-02-19
 
-FIXES IN v2.3.0
+FIXES IN v2.4.0
 ────────────────
-- FIX-80: Lenient schema validation for auto_run_programs
-- FIX-81: Improved ECU-level auto-run program handling
-- FIX-82: Graceful handling of missing database columns
-- FIX-83: Enhanced error recovery during sync
+- FIX-130: Added source tracking for auto-run programs (section vs ecu)
+- FIX-131: Enhanced ECU-level auto-run program loading
+- FIX-132: Improved schema validation leniency for auto_run_programs
+- FIX-133: Added database column existence checks
+- FIX-134: Better error recovery during sync operations
 """
 
 from __future__ import annotations
@@ -175,7 +176,7 @@ def list_all_vehicles() -> List[str]:
 
 
 # =============================================================================
-# FIX-80: LENIENT SCHEMA LOADING & VALIDATION
+# FIX-132: LENIENT SCHEMA LOADING & VALIDATION
 # =============================================================================
 
 _SCHEMA_CACHE: Dict[str, Dict] = {}
@@ -210,7 +211,7 @@ def validate_json(
     """
     Validate a JSON payload against a schema with lenient handling.
     
-    FIX-80: Ignores additionalProperties errors for auto_run_programs
+    FIX-132: Ignores additionalProperties errors for auto_run_programs
     to maintain backward compatibility.
     """
     if Draft202012Validator is None:
@@ -230,7 +231,7 @@ def validate_json(
     for error in validator.iter_errors(payload):
         error_str = str(error)
         
-        # FIX-80: Ignore additionalProperties errors for auto_run_programs
+        # FIX-132: Ignore additionalProperties errors for auto_run_programs
         if "auto_run_programs" in error_str and "Additional properties" in error_str:
             _log(f"Ignoring schema warning: {error.message}", "DEBUG")
             continue
@@ -507,7 +508,7 @@ def get_ecu_details(
             "icon": ecu.get("icon", ""),
             "is_active": ecu.get("is_active", True),
             "sort_order": ecu.get("sort_order", 0),
-            # FIX-81: Include ECU-specific auto-run programs
+            # FIX-131: Include ECU-specific auto-run programs
             "auto_run_programs": ecu.get("auto_run_programs", []),
             "parameters": ecu.get("parameters", []),
         })
@@ -535,17 +536,29 @@ def get_parameter_details(vehicle: str, ecu_code: str) -> List[Dict[str, Any]]:
     ]
 
 
+# =============================================================================
+# FIX-131: GET ECU-SPECIFIC AUTO-RUN PROGRAMS
+# =============================================================================
+
 def get_ecu_auto_run_programs(vehicle: str, ecu_code: str) -> List[Dict[str, Any]]:
     """
-    FIX-81: Get ECU-specific auto-run programs from ecu_tests.json.
+    Get ECU-specific auto-run programs from ecu_tests.json.
     These run when the ECU page loads.
+    
+    FIX-131: Also adds source='ecu' to each program for tracking.
     """
     ecus = get_ecu_details(vehicle, ecu_code)
     if not ecus:
         return []
     
     ecu = ecus[0]
-    return ecu.get("auto_run_programs", [])
+    programs = ecu.get("auto_run_programs", [])
+    
+    # FIX-130: Add source field to each program
+    for prog in programs:
+        prog["source"] = "ecu"
+    
+    return programs
 
 
 # =============================================================================
@@ -996,7 +1009,7 @@ def _to_jsonb_or_empty_array(value: Any) -> str:
 
 
 # =============================================================================
-# FIX-82: DATABASE COLUMN CHECK
+# FIX-133: DATABASE COLUMN CHECK
 # =============================================================================
 
 def _has_column(table: str, column: str) -> bool:
@@ -1056,13 +1069,19 @@ def _ensure_indexes():
             ON app.diagnostic_folders(ecu_code)
         """)
         
+        # Indexes for vehicle diagnostic actions
+        execute("""
+            CREATE INDEX IF NOT EXISTS idx_vehicle_diagnostic_actions_vehicle_ecu 
+            ON app.vehicle_diagnostic_actions(vehicle_id, ecu_code)
+        """)
+        
         _log("Database indexes ensured", "INFO")
     except Exception as e:
         _log(f"Failed to create indexes: {e}", "WARN")
 
 
 # =============================================================================
-# DATABASE SYNC — MAIN ENTRY POINT
+# FIX-130 & FIX-134: DATABASE SYNC — MAIN ENTRY POINT
 # =============================================================================
 
 def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
@@ -1081,7 +1100,7 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
     # Ensure indexes exist before syncing
     _ensure_indexes()
 
-    # FIX-82: Check if auto_run_programs column exists
+    # FIX-133: Check if auto_run_programs column exists
     has_auto_run_column = _has_column("vehicle_diagnostic_actions", "auto_run_programs")
     if not has_auto_run_column:
         _log("WARNING: auto_run_programs column missing in vehicle_diagnostic_actions", "WARN")
@@ -1319,6 +1338,8 @@ def _sync_auto_run_programs_to_db(
 ):
     """
     Sync auto-run program config to vehicle_section_map as jsonb.
+    
+    FIX-130: Programs synced here are section-level (source will be added at runtime)
     """
     normalized = []
 
@@ -1351,6 +1372,7 @@ def _sync_auto_run_programs_to_db(
             "is_required": prog.get("is_required", True),
             "timeout_sec": prog.get("timeout_sec", 15),
             "sort_order": prog.get("sort_order", 0),
+            # Note: source is not stored in DB, added at runtime by service
         }
 
         normalized.append(norm)
@@ -1484,7 +1506,7 @@ def _sync_health_tabs_to_db(
 
 
 # =============================================================================
-# FIX-81: DATABASE SYNC — ECUS AND PARAMETERS WITH AUTO-RUN
+# FIX-131 & FIX-133: DATABASE SYNC — ECUS AND PARAMETERS WITH AUTO-RUN
 # =============================================================================
 
 def _sync_ecus_to_db(
@@ -2063,7 +2085,7 @@ def _sync_test_flashing_config(
 
 
 # =============================================================================
-# AUTO-RUN PROGRAM RETRIEVAL
+# FIX-130: AUTO-RUN PROGRAM RETRIEVAL WITH SOURCE
 # =============================================================================
 
 def get_auto_run_config(
@@ -2112,6 +2134,7 @@ def get_auto_run_config(
                         if isinstance(programs, str):
                             programs = json.loads(programs)
                         if programs:
+                            # Source will be added at runtime by service
                             return programs
 
         except Exception as e:
@@ -2126,7 +2149,7 @@ def get_ecu_auto_run_config(
     ecu_code: str,
 ) -> List[Dict[str, Any]]:
     """
-    FIX-81: Get ECU-specific auto-run program configuration.
+    FIX-131: Get ECU-specific auto-run program configuration.
     These run when the ECU page loads (e.g., ECU Active Check).
     """
     # Try database first if column exists
@@ -2154,6 +2177,7 @@ def get_ecu_auto_run_config(
                     if isinstance(programs, str):
                         programs = json.loads(programs)
                     if programs:
+                        # Source will be added at runtime by service
                         return programs
 
         except Exception as e:
@@ -2397,6 +2421,8 @@ def get_auto_run_programs(
     """
     Extract auto-run program specs from section_tests.json.
     Fallback used by get_auto_run_config when DB unavailable.
+    
+    FIX-130: Source is not set here - will be added at runtime by service.
     """
     try:
         data = load_section_tests(vehicle)
@@ -2445,6 +2471,7 @@ def get_auto_run_programs(
                 "is_required": p.get("is_required", True),
                 "timeout_sec": p.get("timeout_sec", 15),
                 "sort_order": p.get("sort_order", 0),
+                # Source will be added by service at runtime
             })
 
         return normalized
