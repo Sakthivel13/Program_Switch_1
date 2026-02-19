@@ -1,86 +1,104 @@
--- =============================================================================
--- FIX: Add missing auto_run_programs column to vehicle_diagnostic_actions
--- =============================================================================
+What happens is now it is marking the VIN as none, and it is passing, but it should not be 'None'; instead, it should be the actual output from the aut0 vin-read program or from the manual entry. And also, you can clearly see it is in the wrong order, which means first VIN Read and Battery Voltage, current page auto-run programs and then the ECU active check auto-run program for the next page. And it is keep on giving this as a output in the console,
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:42:38,681] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
--- Check if column exists and add if missing
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM information_schema.columns 
-        WHERE table_schema = 'app' 
-        AND table_name = 'vehicle_diagnostic_actions' 
-        AND column_name = 'auto_run_programs'
-    ) THEN
-        ALTER TABLE app.vehicle_diagnostic_actions 
-        ADD COLUMN auto_run_programs JSONB;
-        
-        RAISE NOTICE 'Added auto_run_programs column to vehicle_diagnostic_actions';
-    ELSE
-        RAISE NOTICE 'auto_run_programs column already exists';
-    END IF;
-END $$;
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:45:46,421] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
--- =============================================================================
--- FIX: Update the schema validation to allow auto_run_programs in ecu_tests.json
--- =============================================================================
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:47:38,694] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
--- Note: You need to update your ecu.schema.json file to allow 'auto_run_programs'
--- Add this to your ecu.schema.json in the ecu object properties:
--- "auto_run_programs": {
---   "type": "array",
---   "description": "ECU-specific auto-run programs",
---   "items": {
---     "$ref": "#/definitions/autoRunProgram"
---   }
--- }
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:50:46,431] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
--- =============================================================================
--- Create or replace the function to get ECU status for UI
--- =============================================================================
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:52:38,899] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
-CREATE OR REPLACE FUNCTION app.get_ecu_status_for_session(p_session_id TEXT)
-RETURNS TABLE (
-    ecu_code TEXT,
-    is_active BOOLEAN,
-    last_response TIMESTAMP,
-    error_count INTEGER
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        e.ecu_code,
-        e.is_active,
-        e.last_response,
-        e.error_count
-    FROM app.ecu_active_status e
-    WHERE e.session_id = p_session_id
-    ORDER BY e.ecu_code;
-END;
-$$ LANGUAGE plpgsql;
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:55:46,798] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
--- =============================================================================
--- Ensure all indexes exist for performance
--- =============================================================================
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 08:57:38,944] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
-CREATE INDEX IF NOT EXISTS idx_vehicle_diagnostic_actions_ecu 
-ON app.vehicle_diagnostic_actions(vehicle_id, ecu_code);
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 09:00:47,125] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
-CREATE INDEX IF NOT EXISTS idx_vehicle_diagnostic_actions_auto_run 
-ON app.vehicle_diagnostic_actions USING gin(auto_run_programs);
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 09:02:39,283] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
-CREATE INDEX IF NOT EXISTS idx_ecu_active_status_session_ecu 
-ON app.ecu_active_status(session_id, ecu_code);
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-02-19 09:05:47,155] WARNING in website_with_db: Session cleanup failed: (psycopg2.errors.CheckViolation) new row for relation "auto_run_sessions" violates check constraint "auto_run_sessions_status_check"
+DETAIL:  Failing row contains (323, ar_1771313452_85447eec, 1, 1, TVS iQube ST, diagnostics, null, none, expired, [{"log_as_vin": false, "program_id": "AUTO_ECU_ACTIVE_CHECK", "s..., 2026-02-17 13:00:52.72749, null, t).
 
--- =============================================================================
--- Verify the schema
--- =============================================================================
+[SQL: 
+                        UPDATE app.auto_run_sessions 
+                        SET status = 'expired' 
+                        WHERE status IN ('running', 'started') 
+                        AND started_at < NOW() - INTERVAL '1 hour'
+                    ]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
 
-SELECT 
-    column_name, 
-    data_type, 
-    is_nullable
-FROM information_schema.columns 
-WHERE table_schema = 'app' 
-AND table_name = 'vehicle_diagnostic_actions'
-ORDER BY ordinal_position;
+And the auto-run program of the battery voltage stream is showing only in the test pages. But it should not show in there; instead it should show in the display pages mentioned in the table or in the section_tests.json. Kindly fix all the issues correctly. 
