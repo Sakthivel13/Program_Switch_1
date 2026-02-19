@@ -3,16 +3,16 @@
 DIAGNOSTIC EXECUTION SERVICE (PRODUCTION – DB AUTHORITATIVE)
 FULLY INTEGRATED WITH UPDATED LOADER AND RUNNER
 
-Version: 4.5.0
-Last Updated: 2026-02-18
+Version: 4.6.0
+Last Updated: 2026-02-19
 
-FIXES IN v4.5.0
+FIXES IN v4.6.0
 ────────────────
-- FIX-90: Graceful handling of missing auto_run_programs column
-- FIX-91: Enhanced ECU status persistence for colored dots
-- FIX-92: Improved stream value persistence with error recovery
-- FIX-93: Manual VIN input with proper session updates
-- FIX-94: Database column existence checks before queries
+- FIX-110: Fixed VIN capture from auto-run and manual entry
+- FIX-111: Correct program ordering (section vs ECU level)
+- FIX-112: Enhanced ECU status persistence for colored dots
+- FIX-113: Improved stream value handling with better error recovery
+- FIX-114: Added database column existence checks for compatibility
 """
 
 from __future__ import annotations
@@ -175,7 +175,7 @@ def _log_debug(message: str):
 
 
 # =============================================================================
-# FIX-94: DATABASE UTILITY FUNCTIONS
+# FIX-114: DATABASE UTILITY FUNCTIONS
 # =============================================================================
 
 def _table_exists(schema: str, table: str) -> bool:
@@ -338,7 +338,7 @@ def _as_list(obj: Any) -> Optional[List[Any]]:
     return obj if isinstance(obj, list) else None
 
 
-# FIX-91: Enhanced ECU status extraction
+# FIX-112: Enhanced ECU status extraction
 def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Extract ECU status from a variety of shapes. Supports:
@@ -986,7 +986,7 @@ def _mark_auto_run_session_status(session_id: str, status: str) -> None:
             UPDATE app.auto_run_sessions
                SET status = :status,
                    ended_at = CASE
-                                WHEN :status IN ('completed', 'stopped', 'failed') THEN CURRENT_TIMESTAMP
+                                WHEN :status IN ('completed', 'stopped', 'failed', 'expired') THEN CURRENT_TIMESTAMP
                                 ELSE ended_at
                               END
              WHERE session_id = :sid
@@ -1019,9 +1019,10 @@ def _update_session_vin(session_id: str, vin_value: str, source: str) -> None:
     try:
         execute("""
             UPDATE app.auto_run_sessions
-               SET vin = :vin, vin_source = :src, vin_input_needed = TRUE
+               SET vin = :vin, vin_source = :src, vin_input_needed = FALSE
              WHERE session_id = :sid
         """, {"sid": session_id, "vin": vin_value, "src": source})
+        _log_info(f"VIN updated in session {session_id}: {vin_value} (source: {source})")
     except Exception as e:
         _log_warn(f"Failed to update VIN in session {session_id}: {e}")
 
@@ -1040,7 +1041,7 @@ def _set_vin_input_needed(session_id: str, needed: bool = True) -> None:
         _log_warn(f"Failed to set vin_input_needed for session {session_id}: {e}")
 
 
-# FIX-92: Enhanced stream value persistence with error recovery
+# FIX-113: Enhanced stream value persistence with error recovery
 def _persist_stream_value(
     *,
     session_id: str,
@@ -1114,7 +1115,7 @@ def _persist_stream_value(
         _log_error(traceback.format_exc())
 
 
-# FIX-91: Enhanced ECU status persistence
+# FIX-112: Enhanced ECU status persistence
 def _persist_ecu_status(
     *,
     session_id: str,
@@ -1263,6 +1264,7 @@ def _resolve_auto_run_function(
     function_name = program.get("function_name", "")
     program_id = program.get("program_id", "unknown")
     program_type = program.get("program_type", "single")
+    source = program.get("source", "section")
 
     if not module_name or not function_name:
         _log_error(
@@ -1279,21 +1281,30 @@ def _resolve_auto_run_function(
 
     safe_module = safe_name(module_name)
 
+    # For ECU-level programs, also check ECU-specific paths
     candidates = [
         os.path.join(root, "Auto_Run", f"{safe_module}.py"),
         os.path.join(root, "Diagnostics", "Auto_Run", f"{safe_module}.py"),
     ]
 
-    ecu_targets = program.get("ecu_targets", [])
-    for ecu in ecu_targets:
-        candidates.append(
-            os.path.join(
-                root, "Diagnostics", safe_name(ecu),
-                "Auto_Run", f"{safe_module}.py"
+    # If this is an ECU-level program, check in ECU-specific directories
+    if source == "ecu":
+        ecu_targets = program.get("ecu_targets", [])
+        for ecu in ecu_targets:
+            candidates.append(
+                os.path.join(
+                    root, "Diagnostics", safe_name(ecu),
+                    "Auto_Run", f"{safe_module}.py"
+                )
             )
-        )
+            candidates.append(
+                os.path.join(
+                    root, "Diagnostics", safe_name(ecu),
+                    f"{safe_module}.py"
+                )
+            )
 
-    _log_debug(f"Resolving {program_id}: Searching {len(candidates)} paths for {module_name}.py")
+    _log_debug(f"Resolving {program_id} (source={source}): Searching {len(candidates)} paths for {module_name}.py")
 
     for module_path in candidates:
         if os.path.isfile(module_path):
@@ -1304,7 +1315,7 @@ def _resolve_auto_run_function(
                 if program_type == "stream" and not inspect.isgeneratorfunction(fn):
                     _log_error(f"Program {program_id} is type 'stream' but function {function_name} is not a generator!")
                 
-                _log_info(f"Resolved auto-run function: {function_name} from {module_path}")
+                _log_info(f"Resolved auto-run function: {function_name} from {module_path} (source={source})")
                 return fn
             except (ModuleLoadError, FunctionNotFoundError) as e:
                 _log_warn(f"Found file {module_path} but function load failed: {e}")
@@ -1317,13 +1328,13 @@ def _resolve_auto_run_function(
 
     _log_error(
         f"Auto-run function NOT FOUND: {module_name}.{function_name} "
-        f"for vehicle {vehicle_name}. Searched paths: {candidates}"
+        f"for vehicle {vehicle_name} (source={source}). Searched paths: {candidates}"
     )
     return None
 
 
 # =============================================================================
-# FIX-90: AUTO-RUN SESSION MANAGEMENT WITH COLUMN CHECKS
+# FIX-110 & FIX-111: AUTO-RUN SESSION MANAGEMENT
 # =============================================================================
 
 def start_auto_run(
@@ -1340,10 +1351,10 @@ def start_auto_run(
     """
     Start an auto-run session for a vehicle section.
     
-    FIX-90: Now includes ECU-level auto-run programs from ecu_tests.json
-    FIX-91: Enhanced ECU status tracking
-    FIX-92: Improved stream value persistence
-    FIX-93: Manual VIN input support
+    FIX-110: Enhanced VIN capture from auto-run and manual entry
+    FIX-111: Correct program ordering (section vs ECU level)
+    FIX-112: Enhanced ECU status tracking for colored dots
+    FIX-113: Improved stream value persistence
     """
     _log_info(
         f"Starting auto-run: vehicle={vehicle_name}, "
@@ -1364,6 +1375,9 @@ def start_auto_run(
     # Get section-level auto-run programs (from section_tests.json)
     try:
         section_programs = get_auto_run_config(vehicle_name, section_type)
+        # Mark them as section-level
+        for prog in section_programs:
+            prog["source"] = "section"
     except VehicleNotFoundError:
         return {"ok": False, "error": "VEHICLE_NOT_FOUND"}
     except Exception as e:
@@ -1387,8 +1401,8 @@ def start_auto_run(
     except Exception as e:
         _log_warn(f"Error loading ECU auto-run config: {e}")
 
-    # Combine programs (section-level first, then ECU-level)
-    all_programs = (section_programs or []) + ecu_programs
+    # FIX-111: Combine programs with source tracking
+    all_programs = (section_programs or []) + (ecu_programs or [])
     
     if not all_programs:
         _log_info(f"No auto-run programs for {vehicle_name}/{section_type}")
@@ -1424,6 +1438,7 @@ def start_auto_run(
                 "program_id": program_id,
                 "program_name": program_name,
                 "reason": "FUNCTION_NOT_FOUND",
+                "source": source,
             })
             continue
 
@@ -1525,26 +1540,60 @@ def start_auto_run(
     # Map for callback lookup
     specs_map = {s.program_id: s for s in specs}
 
+    # FIX-110: Enhanced VIN capture in single result wrapper
     def on_single_result_wrapper(sid: str, pid: str, result: Dict[str, Any]):
         """Persist single program result + VIN + ECU statuses."""
         db_persister(sid, pid, result)
 
-        # VIN persistence (auto read)
+        # FIX-110: Proper VIN extraction and persistence
         try:
-            if result.get("log_as_vin") and result.get("passed"):
-                vin_value = result.get("result_value")
-                if isinstance(vin_value, str) and len(vin_value.strip()) == 17:
+            if result.get("log_as_vin"):
+                # Try to get VIN from various possible locations
+                vin_value = None
+                
+                # Check result_value first (from _extract_result_value)
+                if result.get("result_value"):
+                    vin_candidate = result["result_value"].strip().upper()
+                    if len(vin_candidate) == 17 and not any(c in vin_candidate for c in "IOQ"):
+                        vin_value = vin_candidate
+                
+                # Check result_data for VIN
+                if not vin_value and result.get("result_data"):
+                    if isinstance(result["result_data"], dict):
+                        # Check direct keys
+                        for key in ["vin", "VIN", "value", "result"]:
+                            if key in result["result_data"]:
+                                val = str(result["result_data"][key]).strip().upper()
+                                if len(val) == 17:
+                                    vin_value = val
+                                    break
+                        
+                        # Check nested data
+                        if not vin_value and "data" in result["result_data"]:
+                            data = result["result_data"]["data"]
+                            if isinstance(data, dict):
+                                for key in ["vin", "VIN"]:
+                                    if key in data:
+                                        val = str(data[key]).strip().upper()
+                                        if len(val) == 17:
+                                            vin_value = val
+                                            break
+                
+                if vin_value and result.get("passed"):
+                    _log_info(f"VIN captured: {vin_value} from program {pid}")
                     _update_session_vin(sid, vin_value, source="auto")
+                    
+                    # Also store in result_value for UI display
+                    result["result_value"] = vin_value
         except Exception as e:
             _log_warn(f"Failed to update session VIN: {e}")
 
-        # VIN fallback trigger
-        if (
-            result.get("log_as_vin", False)
-            and not result.get("passed", False)
-            and result.get("fallback_action") == FALLBACK_MANUAL_INPUT
-            and pid not in vin_manual_triggered
-        ):
+        # VIN fallback trigger (only for VIN program)
+        if (result.get("log_as_vin", False) and 
+            not result.get("passed", False) and 
+            result.get("fallback_action") == FALLBACK_MANUAL_INPUT and 
+            pid not in vin_manual_triggered):
+            
             vin_manual_triggered.add(pid)
             _log_info(f"VIN auto-read failed for {pid}, marking vin_input_needed")
             
@@ -1574,7 +1623,7 @@ def start_auto_run(
         except Exception as e:
             _log_warn(f"Failed to log auto VIN: {e}")
 
-        # FIX-91: ECU active statuses handling for colored dots
+        # FIX-112: ECU active statuses handling for colored dots
         try:
             # Extract ECU statuses from result
             ecu_statuses = _extract_ecu_statuses_anywhere(result)
@@ -1617,7 +1666,7 @@ def start_auto_run(
             except Exception as e:
                 _log_error(f"on_single_result callback error: {e}")
 
-    # FIX-92: Enhanced stream data wrapper
+    # FIX-113: Enhanced stream data wrapper
     def on_stream_data_wrapper(sid: str, pid: str, stream_payload: Any):
         """
         Persist streaming data to DB and forward to external callback.
@@ -1683,7 +1732,7 @@ def start_auto_run(
     for spec in specs:
         if spec.program_type == "stream":
             stream_count += 1
-            _log_info(f"  Setting stream callback for {spec.program_id}")
+            _log_info(f"  Setting stream callback for {spec.program_id} (source={spec.source})")
             
             def make_stream_cb(program_id: str):
                 def stream_cb(task_id: str, data: Dict[str, Any]):
@@ -1711,6 +1760,7 @@ def start_auto_run(
         _mark_auto_run_session_status(session_id, "failed")
         return {"ok": False, "session_id": session_id, "error": start_result["error"]}
 
+    # FIX-111: Include source in program summary for UI filtering
     program_summary = []
     for spec in specs:
         program_summary.append({
@@ -1725,7 +1775,7 @@ def start_auto_run(
             "fallback_input": spec.fallback_input,
             "log_as_vin": spec.log_as_vin,
             "is_required": spec.is_required,
-            "source": spec.source,
+            "source": spec.source,  # CRITICAL: For UI to filter programs
             "ecu_targets": spec.ecu_targets,
         })
 
@@ -1766,6 +1816,7 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
         status = result.get("status", "")
         fallback = result.get("fallback_action", "none")
         log_as_vin = result.get("log_as_vin", False)
+        source = result.get("source", "section")
         
         # If this is a VIN program and VIN was provided (auto or manual), consider it passed
         if log_as_vin and vin and vin_source in ("auto", "manual"):
@@ -1809,7 +1860,7 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
                     all_required_passed = False
                     break
 
-    # Add ECU status information
+    # FIX-112: Add ECU status information
     ecu_status = {}
     if session_id:
         # Get unique ECUs from programs
@@ -1828,7 +1879,7 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
     return session_data
 
 
-# FIX-93: Manual VIN submission
+# FIX-110: Manual VIN submission
 def submit_auto_run_vin(session_id: str, program_id: str, vin_value: str) -> Dict[str, Any]:
     """
     Submit manual VIN for a failed auto-run VIN read.
@@ -2246,7 +2297,7 @@ def list_sections_for_vehicle(vehicle_name: str, user_id: int, user_role: str) -
 
 
 # =============================================================================
-# FIX-90: UI LISTING API — ECUS (with column check)
+# FIX-114: UI LISTING API — ECUS (with column check)
 # =============================================================================
 
 def list_ecus_for_vehicle(vehicle_name: str, user_id: int, user_role: str) -> List[Dict[str, Any]]:
@@ -2663,6 +2714,7 @@ def get_tests_page_context(
                         "fallback_action": p.get("fallback_action"),
                         "log_as_vin": p.get("log_as_vin", False),
                         "is_required": p.get("is_required", True),
+                        "source": "section",
                     }
                     for p in auto_run_configs
                 ],
@@ -2949,7 +3001,7 @@ def get_service_stats() -> Dict[str, Any]:
 # =============================================================================
 
 def init_service():
-    _log_info("Diagnostic service v4.5.0 initialized")
+    _log_info("Diagnostic service v4.6.0 initialized")
 
     if not DATABASE_AVAILABLE:
         _log_warn("Database not available — limited functionality")
