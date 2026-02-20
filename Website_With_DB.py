@@ -3,16 +3,20 @@
 NIRIX DIAGNOSTICS – MAIN WEB APPLICATION (PostgreSQL Production)
 FULLY INTEGRATED WITH UPDATED LOADER, SERVICE, RUNNER, AND SCANNER (OpenCV)
 
-Version: 3.1.0
-Last Updated: 2026-02-14
+Version: 3.2.0
+Last Updated: 2026-02-20
 
-FIXES IN v3.1.0
+FIXES IN v3.2.0
 ────────────────
 - FIX-30: Stream values API endpoint - ensures auto_run_stream_values are queryable
 - FIX-31: Auto-run session VIN persistence - VIN displays correctly in UI
 - FIX-32: Enhanced error handling for stream value polling
 - FIX-33: Added stream values cleanup on session end
 - FIX-34: Improved debug logging for troubleshooting
+- FIX-36: Per-login auto-run session tracking (one session per login)
+- FIX-37: Vehicle selection page with images and VIN patterns
+- FIX-38: Fixed missing updated_at columns in cleanup
+- FIX-39: Enhanced ECU status polling with proper error handling
 """
 
 # =============================================================================
@@ -30,13 +34,14 @@ import platform
 import uuid
 import traceback
 from typing import Optional, Dict, List, Any
+from functools import wraps
 
 # =============================================================================
 # FLASK
 # =============================================================================
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, jsonify, send_from_directory, abort, Response
+    session, jsonify, send_from_directory, abort, Response, g
 )
 
 # =============================================================================
@@ -254,6 +259,11 @@ app.secret_key = os.environ.get("FLASK_SECRET", "CHANGE_ME_IMMEDIATELY")
 
 app.config["JSON_SORT_KEYS"] = False
 app.config["JSONIFY_PRETTYPRINT_REGULAR"] = False
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600  # Cache static files for 1 hour
+app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(hours=8)
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # =============================================================================
 # VALIDATION CONSTANTS
@@ -321,6 +331,14 @@ def require_auth():
     if not user:
         abort(401)
     return user
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("root"))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # =============================================================================
 # EMAIL (OPTIONAL)
@@ -430,6 +448,9 @@ def get_user_by_id(user_id: int) -> Optional[Dict]:
     """, {"id": user_id})
 
 def login_user_into_session(user_row: Dict) -> Dict:
+    # Generate unique login ID for this session (FIX-36)
+    user_login_id = str(uuid.uuid4())
+    
     session_user = {
         "id": user_row["id"],
         "name": user_row["name"],
@@ -437,8 +458,26 @@ def login_user_into_session(user_row: Dict) -> Dict:
         "email": user_row["email"],
         "role": user_row.get("role") or ROLE_TECHNICIAN,
         "theme": user_row.get("theme") or None,
+        "login_id": user_login_id,  # Track this login instance
     }
     session["user"] = session_user
+    session.permanent = True
+    
+    # Record login session in database
+    try:
+        execute("""
+            INSERT INTO app.user_login_sessions (user_id, login_id, ip_address, user_agent, login_time)
+            VALUES (:uid, :login_id, :ip, :ua, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, login_id) DO NOTHING
+        """, {
+            "uid": user_row["id"],
+            "login_id": user_login_id,
+            "ip": request.remote_addr,
+            "ua": request.headers.get("User-Agent", "")
+        })
+    except Exception as e:
+        app.logger.warning(f"Failed to record login session: {e}")
+    
     return session_user
 
 def email_exists(email: str) -> bool:
@@ -519,6 +558,21 @@ def update_live_system() -> None:
 def _before_request():
     if session.get("user"):
         update_live_system()
+        
+        # Update last_accessed for auto-run sessions (FIX-36)
+        try:
+            execute("""
+                UPDATE app.auto_run_sessions
+                SET last_accessed = CURRENT_TIMESTAMP
+                WHERE user_id = :uid 
+                  AND user_login_id = :login_id
+                  AND status IN ('running', 'started')
+            """, {
+                "uid": session["user"]["id"],
+                "login_id": session["user"].get("login_id")
+            })
+        except Exception as e:
+            app.logger.warning(f"Failed to update session last_accessed: {e}")
 
 # =============================================================================
 # PERIODIC CLEANUP
@@ -528,26 +582,47 @@ def _start_cleanup_thread():
         import time as _time
         while True:
             try:
-                _time.sleep(300)
-                removed = purge_completed_tasks()
-                if removed > 0:
-                    append_global_log(f"Cleaned up {removed} completed tasks", "DEBUG")
-
-                # Optional scanner cleanup
-                if SCANNER_AVAILABLE and cleanup_scans is not None:
-                    cleanup_scans(max_age_sec=300)
-
-                # FIX-33: Clean up old stream values (older than 1 hour)
+                _time.sleep(300)  # 5 minutes
+                
+                # Use database cleanup function if available
                 try:
-                    execute("""
+                    result = execute("SELECT app.cleanup_expired_sessions()")
+                    if result:
+                        append_global_log("Database cleanup completed", "DEBUG")
+                except Exception as e:
+                    # Fallback to manual cleanup
+                    removed = purge_completed_tasks()
+                    
+                    # Clean up old auto-run sessions (FIX-36)
+                    expired = execute("""
+                        UPDATE app.auto_run_sessions
+                        SET status = 'expired', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                        WHERE status IN ('running', 'started')
+                          AND last_accessed < NOW() - INTERVAL '2 hours'
+                        RETURNING session_id
+                    """)
+                    
+                    if expired and expired.rowcount > 0:
+                        append_global_log(f"Expired {expired.rowcount} stale auto-run sessions", "DEBUG")
+                    
+                    # Clean up old stream values (FIX-33)
+                    stream_removed = execute("""
                         DELETE FROM app.auto_run_stream_values
                         WHERE updated_at < NOW() - INTERVAL '1 hour'
                     """)
-                except Exception as e:
-                    app.logger.warning(f"Stream values cleanup failed: {e}")
+                    
+                    # Optional scanner cleanup
+                    if SCANNER_AVAILABLE and cleanup_scans is not None:
+                        cleanup_scans(max_age_sec=300)
+                    
+                    if removed > 0 or (stream_removed and stream_removed.rowcount > 0):
+                        append_global_log(f"Cleaned up {removed} tasks, {stream_removed.rowcount if stream_removed else 0} stream values", "DEBUG")
 
             except Exception as e:
                 app.logger.error(f"Cleanup error: {e}")
+                app.logger.error(traceback.format_exc())
+            
+            _time.sleep(300)  # Wait before next cleanup
 
     threading.Thread(target=cleanup_loop, daemon=True).start()
 
@@ -699,7 +774,7 @@ def login():
     set_config_value("can_interface", can_interface)
 
     login_user_into_session(user)
-    append_global_log(f"User logged in: {email}")
+    append_global_log(f"User logged in: {email} with login_id={session['user'].get('login_id')}")
     return redirect(url_for("dashboard"))
 
 # =============================================================================
@@ -707,6 +782,20 @@ def login():
 # =============================================================================
 @app.route("/logout")
 def logout():
+    # Mark login session as inactive
+    if "user" in session:
+        try:
+            execute("""
+                UPDATE app.user_login_sessions
+                SET is_active = FALSE, last_activity = CURRENT_TIMESTAMP
+                WHERE user_id = :uid AND login_id = :login_id
+            """, {
+                "uid": session["user"]["id"],
+                "login_id": session["user"].get("login_id")
+            })
+        except Exception as e:
+            app.logger.warning(f"Failed to update login session: {e}")
+    
     session.clear()
     return redirect(url_for("root"))
 
@@ -881,9 +970,8 @@ Approval Code: {approval_code}
 # DASHBOARD
 # =============================================================================
 @app.route("/dashboard")
+@login_required
 def dashboard():
-    require_login()
-
     user = session["user"]
     role = user["role"]
     user_id = user["id"]
@@ -948,10 +1036,8 @@ def tests_page(model_name):
 # TESTS PAGE (HIERARCHICAL NAVIGATION - MAIN ROUTE)
 # =============================================================================
 @app.route("/tests")
+@login_required
 def tests_root():
-    if "user" not in session:
-        return redirect(url_for("root"))
-
     user = session["user"]
     role = user["role"]
     user_id = user["id"]
@@ -981,7 +1067,7 @@ def tests_root():
         except Exception as e:
             app.logger.warning(f"Failed to load VIN for session {auto_run_session_id}: {e}")
 
-    # PHASE 0: Vehicle selection
+    # PHASE 0: Vehicle selection (ENHANCED with images and VIN patterns - FIX-37)
     if not model_name:
         if role == ROLE_SUPER_ADMIN:
             vehicles = query_all("""
@@ -1310,6 +1396,7 @@ def api_run_all_tests():
 def api_run_auto_programs():
     """
     Start auto-run programs for a section using the new auto-run session system.
+    Ensures only one auto-run session per user login (FIX-36).
 
     Payload:
       { "vehicle_name": "...", "section": "diagnostics"|"vehicle_health" }
@@ -1333,6 +1420,7 @@ def api_run_auto_programs():
         return jsonify({"ok": False, "error": "not_authenticated"}), 401
 
     user = session["user"]
+    user_login_id = user.get("login_id")
     payload = request.get_json(silent=True) or {}
 
     vehicle_name = (payload.get("vehicle_name") or "").strip()
@@ -1341,15 +1429,39 @@ def api_run_auto_programs():
     if not vehicle_name or section not in ("diagnostics", "vehicle_health"):
         return jsonify({"ok": False, "error": "invalid_parameters"}), 400
 
+    # Check for existing running session for this user login (FIX-36)
+    try:
+        existing = query_one("""
+            SELECT session_id, status 
+            FROM app.auto_run_sessions 
+            WHERE user_id = :uid 
+              AND user_login_id = :login_id
+              AND status IN ('running', 'started')
+              AND started_at > NOW() - INTERVAL '2 hours'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, {"uid": user["id"], "login_id": user_login_id})
+        
+        if existing:
+            app.logger.info(f"Found existing auto-run session for login {user_login_id}: {existing['session_id']}")
+            return jsonify({
+                "ok": False,
+                "error": "AUTO_RUN_ALREADY_ACTIVE",
+                "session_id": existing["session_id"],
+                "message": "Auto-run already running for this login session"
+            }), 409
+    except Exception as e:
+        app.logger.warning(f"Error checking existing session: {e}")
+
     result = start_auto_run(
         user_id=int(user["id"]),
         user_role=str(user["role"]),
         vehicle_name=vehicle_name,
         section_type=section,
+        user_login_id=user_login_id,  # Pass login ID for tracking
     )
 
     if not result.get("ok"):
-        # Always return ok:false with error string for fail-closed UI logic
         return jsonify({"ok": False, "error": result.get("error", "AUTO_RUN_FAILED"), "details": result}), 400
 
     programs = result.get("programs") or []
@@ -1433,18 +1545,45 @@ def api_auto_run_status(session_id: str):
     try:
         row = query_one("""
             SELECT session_id, vehicle_id, vehicle_name, section_type,
-                   status, vin, vin_source, started_at, ended_at
+                   status, vin, vin_source, started_at, ended_at,
+                   last_accessed, updated_at
             FROM app.auto_run_sessions
             WHERE session_id = :sid
             LIMIT 1
         """, {"sid": session_id})
         if row:
             live["db_session"] = dict(row)
+            
+            # Update last_accessed
+            execute("""
+                UPDATE app.auto_run_sessions
+                SET last_accessed = CURRENT_TIMESTAMP
+                WHERE session_id = :sid
+            """, {"sid": session_id})
     except Exception as e:
-        # Don't fail the endpoint if DB snapshot fails
         app.logger.warning(f"Failed to load DB auto_run_session snapshot: {e}")
 
     return jsonify(live)
+
+# =============================================================================
+# API: AUTO-RUN SESSION HEARTBEAT (FIX-36)
+# =============================================================================
+@app.post("/api/auto_run/<session_id>/heartbeat")
+def api_auto_run_heartbeat(session_id: str):
+    """Update last_accessed timestamp for auto-run session."""
+    if "user" not in session:
+        return jsonify({"ok": False, "error": "not_authenticated"}), 401
+    
+    try:
+        execute("""
+            UPDATE app.auto_run_sessions
+            SET last_accessed = CURRENT_TIMESTAMP
+            WHERE session_id = :sid
+        """, {"sid": session_id})
+        return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.error(f"Failed to update session heartbeat: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
 # FIX-30: API: AUTO-RUN STREAM VALUES (FOR LIVE DISPLAY)
@@ -1490,7 +1629,7 @@ def api_get_stream_values(session_id: str):
         }), 500
 
 # =============================================================================
-# API: ECU ACTIVE STATUS
+# API: ECU ACTIVE STATUS (FIX-39)
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/ecu_status")
 def api_get_ecu_status(session_id: str):
@@ -1506,6 +1645,7 @@ def api_get_ecu_status(session_id: str):
             SELECT ecu_code, is_active, error_count, last_response
             FROM app.ecu_active_status
             WHERE session_id = :sid
+            ORDER BY ecu_code
         """, {"sid": session_id})
         
         return jsonify({
@@ -1800,6 +1940,7 @@ def api_save_test_log():
     log_text = data.get("log_text") or ""
     test_id = data.get("test_id")
     task_id = data.get("task_id")
+    auto_run_session_id = data.get("auto_run_session_id")
 
     if not vehicle_name or not vin or not log_text:
         return jsonify({"error": "missing_fields"}), 400
@@ -1818,6 +1959,7 @@ def api_save_test_log():
 # VIN: {vin}
 # Test ID: {test_id or 'N/A'}
 # Task ID: {task_id or 'N/A'}
+# Auto-run Session: {auto_run_session_id or 'N/A'}
 # Timestamp: {datetime.datetime.utcnow().isoformat()}
 # User: {session['user']['email']}
 # Station: {STATION_ID}
@@ -1829,12 +1971,13 @@ def api_save_test_log():
         f.write(header + log_text)
 
     execute("""
-        INSERT INTO app.logs (filename, vehicle_name, vin, user_id, created_at)
-        VALUES (:fn, :veh, :vin, :uid, NOW())
+        INSERT INTO app.logs (filename, vehicle_name, vin, auto_run_session_id, user_id, created_at)
+        VALUES (:fn, :veh, :vin, :ars, :uid, NOW())
     """, {
         "fn": filename,
         "veh": vehicle_name,
         "vin": vin,
+        "ars": auto_run_session_id,
         "uid": session["user"]["id"],
     })
 
@@ -1845,10 +1988,8 @@ def api_save_test_log():
 # LOGS PAGE
 # =============================================================================
 @app.route("/logs")
+@login_required
 def logs_page():
-    if "user" not in session:
-        return redirect(url_for("root"))
-
     user = session["user"]
     role = user["role"]
     user_id = user["id"]
@@ -1887,7 +2028,7 @@ def logs_page():
     total_pages = max(1, (total + per_page - 1) // per_page)
 
     logs = query_all(f"""
-        SELECT id, filename, vehicle_name, vin, user_id, created_at
+        SELECT id, filename, vehicle_name, vin, auto_run_session_id, user_id, created_at
         FROM app.logs {where_sql}
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
@@ -1976,10 +2117,8 @@ def logs_download(log_id):
 # DOWNLOADS PAGE
 # =============================================================================
 @app.route("/downloads")
+@login_required
 def downloads_page():
-    if "user" not in session:
-        return redirect(url_for("root"))
-
     driver_links = {
         "pcan": {
             "name": "PCAN",
@@ -2054,13 +2193,23 @@ def api_clear_logs():
 @app.route("/health")
 def health_check():
     stats = get_runner_stats()
+    
+    # Check database connectivity
+    db_ok = False
+    try:
+        query_one("SELECT 1")
+        db_ok = True
+    except:
+        pass
+    
     return jsonify({
         "status": "ok",
         "timestamp": datetime.datetime.utcnow().isoformat(),
         "station": STATION_ID,
         "active_tasks": stats.get("tasks", {}).get("active", 0),
         "scanner_available": SCANNER_AVAILABLE,
-        "version": "3.1.0",
+        "database_connected": db_ok,
+        "version": "3.2.0",
     })
 
 # =============================================================================
@@ -2129,7 +2278,7 @@ if __name__ == "__main__":
         pass
 
     print("\n" + "=" * 60)
-    print("NIRIX Diagnostics v3.1.0")
+    print("NIRIX Diagnostics v3.2.0")
     print("URL: http://0.0.0.0:8000")
     print(f"Station ID: {STATION_ID}")
     print(f"Active Tasks: {get_active_task_count()}")
