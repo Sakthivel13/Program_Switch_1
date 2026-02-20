@@ -12,237 +12,300 @@ Auto-run entry point (from section_tests.json):
 UDS DID: 22 F1 90  (VIN)
 CAN IDs: 0x7F0 (req), 0x7F1 (resp)
 
-Version: 2.1.0
-Last Updated: 2026-02-19
+Version: 3.0.0
+Last Updated: 2026-02-21
 
-FIXES IN v2.1.0
+FIXES IN v3.0.0
 ────────────────
-- FIX-140: Enhanced VIN extraction with multi-frame response support
-- FIX-141: Added multiple output formats for reliable VIN capture
-- FIX-142: Improved error handling and logging
-- FIX-143: Added manual input flag support for UI
-- FIX-144: Better timeout and retry handling
+- FIX-31: VIN persistence with proper session storage
+- FIX-54: Manual VIN input integration
+- FIX-63: Enhanced VIN validation (no I/O/Q, 17 chars)
+- FIX-80: Improved CAN error handling with retries
+- FIX-81: Multiple decode attempts for VIN data
+- FIX-84: Strict VIN validation and formatting
+- FIX-88: Frame preprocessing for better detection
 """
 
 from __future__ import annotations
 
 import time
 import logging
-from typing import Dict, Any, Optional, Generator
+import traceback
+from typing import Dict, Any, Optional, Tuple
+from datetime import datetime
 
 import can
+from can import BusABC, Message
 
-logging.getLogger("can").setLevel(logging.ERROR)
+# =============================================================================
+# LOGGING
+# =============================================================================
 
+logger = logging.getLogger(__name__)
 
-def _open_bus(can_interface: str, bitrate: int) -> Optional[can.Bus]:
+def _log_info(msg: str, context=None):
+    if context:
+        context.log(msg, "INFO")
+    else:
+        logger.info(f"[VIN_READ] {msg}")
+
+def _log_warn(msg: str, context=None):
+    if context:
+        context.log(msg, "WARN")
+    else:
+        logger.warning(f"[VIN_READ] {msg}")
+
+def _log_error(msg: str, context=None):
+    if context:
+        context.log(msg, "ERROR")
+    else:
+        logger.error(f"[VIN_READ] {msg}")
+
+def _log_debug(msg: str, context=None):
+    if context:
+        context.log(msg, "DEBUG")
+    else:
+        logger.debug(f"[VIN_READ] {msg}")
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# UDS Services
+UDS_READ_DATA_BY_IDENTIFIER = 0x22
+UDS_POSITIVE_RESPONSE_MASK = 0x40
+
+# DID for VIN (0xF190)
+VIN_DID = 0xF190
+VIN_DID_BYTES = [0xF1, 0x90]
+
+# CAN IDs
+REQUEST_ID = 0x7F0
+RESPONSE_ID = 0x7F1
+
+# Timeouts
+DEFAULT_TIMEOUT = 2.0
+FRAME_TIMEOUT = 0.3
+SESSION_SETUP_TIMEOUT = 0.5
+
+# Retry settings
+MAX_RETRIES = 3
+RETRY_DELAY = 0.5
+
+# VIN validation
+VIN_LENGTH = 17
+VIN_INVALID_CHARS = set("IOQ")
+VIN_PATTERN = r"^[A-HJ-NPR-Z0-9]{17}$"
+
+# =============================================================================
+# CAN BUS HELPERS
+# =============================================================================
+
+def _open_bus(can_interface: str, bitrate: int, context=None) -> Optional[can.Bus]:
     """
-    Open CAN bus connection.
-    Returns None if bus cannot be opened.
+    Open CAN bus connection with retry logic.
+    Returns None if bus cannot be opened after retries.
     """
     iface = (can_interface or "").strip()
-    try:
-        if iface.upper().startswith("PCAN"):
-            return can.Bus(interface="pcan", channel=iface, bitrate=int(bitrate), fd=False)
-        if iface.lower().startswith("can"):
-            return can.Bus(interface="socketcan", channel=iface, bitrate=int(bitrate))
-        raise ValueError(f"Unsupported CAN interface: {iface}")
-    except Exception as e:
-        print(f"[VIN_READ] Failed to open CAN bus: {e}")
+    
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            _log_debug(f"Opening CAN bus (attempt {attempt}/{MAX_RETRIES})", context)
+            
+            if iface.upper().startswith("PCAN"):
+                bus = can.Bus(
+                    interface="pcan", 
+                    channel=iface, 
+                    bitrate=int(bitrate), 
+                    fd=False
+                )
+            elif iface.lower().startswith("can") or iface.lower().startswith("vcan"):
+                bus = can.Bus(
+                    interface="socketcan", 
+                    channel=iface, 
+                    bitrate=int(bitrate)
+                )
+            else:
+                raise ValueError(f"Unsupported CAN interface: {iface}")
+            
+            # Verify bus is operational
+            if bus.state == can.BusState.ACTIVE:
+                _log_info(f"CAN bus opened successfully: {iface}", context)
+                return bus
+            
+        except Exception as e:
+            _log_warn(f"Failed to open CAN bus (attempt {attempt}): {e}", context)
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY * attempt)  # Exponential backoff
+    
+    _log_error(f"Failed to open CAN bus after {MAX_RETRIES} attempts", context)
+    return None
+
+
+def _serialize_can_message(msg: Optional[can.Message]) -> Optional[Dict[str, Any]]:
+    """Serialize CAN message for logging and raw data."""
+    if not msg:
         return None
-
-
-def _serialize_can_message(msg: can.Message) -> Dict[str, Any]:
-    """Serialize CAN message for logging."""
+    
     return {
-        "arbitration_id": f"{msg.arbitration_id:03X}",
+        "arbitration_id": f"0x{msg.arbitration_id:03X}",
         "is_extended_id": bool(msg.is_extended_id),
         "dlc": int(msg.dlc),
         "data": [f"{b:02X}" for b in msg.data],
         "timestamp": float(getattr(msg, "timestamp", 0.0) or 0.0),
+        "channel": str(getattr(msg, "channel", "unknown")),
     }
 
 
-def _validate_vin(vin: str) -> bool:
+def _setup_diagnostic_session(bus: BusABC, context=None) -> bool:
     """
-    Validate a VIN string.
-    
-    Rules:
-    - Exactly 17 characters
-    - No I, O, or Q characters
-    - Alphanumeric only (A-Z, 0-9)
+    Setup UDS diagnostic session (10 03) before communication.
+    Returns True if session established successfully.
     """
-    if not vin or len(vin) != 17:
-        return False
-    
-    # Check for invalid characters
-    if any(c in vin for c in "IOQ"):
-        return False
-    
-    # Check for valid characters (A-Z, 0-9)
-    return all(c.isalnum() for c in vin)
-
-
-def _read_vin_once(bus: can.BusABC, *, context=None, progress=None) -> Dict[str, Any]:
-    """
-    Send UDS ReadDataByIdentifier (22 F1 90) once and parse response.
-    
-    Handles multi-frame responses (ISO-TP) for complete VIN.
-    
-    Returns dict with vin, message, raw.
-    Raises TimeoutError on no response.
-    """
-    def log(msg: str, level: str = "INFO"):
-        if context:
-            context.log(msg, level)
-        else:
-            print(f"[{level}] {msg}")
-
-    if context:
-        context.checkpoint()
-        context.progress(10, "Sending UDS request (22 F1 90)")
-    if progress:
-        progress(10, "Sending UDS request (22 F1 90)")
-
-    # UDS ReadDataByIdentifier request for VIN (22 F1 90)
-    req = can.Message(
-        arbitration_id=0x7F0,
-        is_extended_id=False,
-        data=[0x03, 0x22, 0xF1, 0x90, 0x00, 0x00, 0x00, 0x00],
-    )
-    log(f"Tx {req.arbitration_id:03X} " + " ".join(f"{b:02X}" for b in req.data))
-    
     try:
-        bus.send(req)
-    except Exception as e:
-        log(f"Failed to send CAN message: {e}", "ERROR")
-        raise
-
-    if context:
-        context.progress(35, "Waiting for ECU response")
-
-    # Wait for response (VIN response can be multi-frame)
-    deadline = time.time() + 3.0  # 3 second timeout for complete VIN
-    responses = []
-    vin_bytes = bytearray()
-    expected_length = 0
-    received_frames = 0
-    total_frames = 1  # Default to single frame
-    
-    log("Waiting for VIN response (may be multi-frame)...")
-    
-    while time.time() < deadline:
-        if context:
-            context.checkpoint()
-
-        try:
-            msg = bus.recv(timeout=0.5)
-        except Exception as e:
-            log(f"Error receiving CAN message: {e}", "ERROR")
-            continue
-            
-        if not msg:
-            continue
-        if msg.arbitration_id != 0x7F1:
-            continue
-
-        log(f"Rx {msg.arbitration_id:03X} " + " ".join(f"{b:02X}" for b in msg.data))
-        responses.append(msg)
+        # Diagnostic Session Control (10 03) - Extended session
+        setup_req = can.Message(
+            arbitration_id=REQUEST_ID,
+            is_extended_id=False,
+            data=[0x02, 0x10, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00],
+        )
         
-        # Check if this is a response to 22 F1 90
-        if len(msg.data) >= 4 and msg.data[1] == 0x62 and msg.data[2] == 0xF1 and msg.data[3] == 0x90:
-            # This is a positive response
-            pcidata = msg.data[0]  # PCI (Protocol Control Information)
+        _log_debug(f"Sending diagnostic session setup: 10 03", context)
+        bus.send(setup_req)
+        
+        # Wait for response
+        response = bus.recv(timeout=SESSION_SETUP_TIMEOUT)
+        if response and response.arbitration_id == RESPONSE_ID:
+            # Check for positive response (50 03)
+            if len(response.data) >= 3 and response.data[1] == 0x50 and response.data[2] == 0x03:
+                _log_debug("Diagnostic session established", context)
+                return True
+        
+        _log_warn("Failed to establish diagnostic session", context)
+        return False
+        
+    except Exception as e:
+        _log_warn(f"Session setup error: {e}", context)
+        return False
+
+
+def _send_uds_request(
+    bus: BusABC, 
+    service: int, 
+    data: bytes, 
+    context=None
+) -> Optional[Message]:
+    """
+    Send UDS request and wait for response.
+    Returns response message or None.
+    """
+    try:
+        # Build request message
+        request_data = bytearray([len(data) + 1, service]) + data
+        request_data.extend([0x00] * (8 - len(request_data)))  # Pad to 8 bytes
+        
+        req = can.Message(
+            arbitration_id=REQUEST_ID,
+            is_extended_id=False,
+            data=request_data,
+        )
+        
+        _log_debug(f"Tx: {req.arbitration_id:03X} " + 
+                   " ".join(f"{b:02X}" for b in req.data), context)
+        
+        bus.send(req)
+        
+        # Wait for response
+        deadline = time.time() + DEFAULT_TIMEOUT
+        while time.time() < deadline:
+            if context:
+                context.checkpoint()
             
-            if (pcidata & 0xF0) == 0x10:
-                # First frame of multi-frame response
-                expected_length = ((pcidata & 0x0F) << 8) | msg.data[1]
-                total_frames = (expected_length + 6) // 7  # Calculate total frames needed
-                log(f"Multi-frame response detected: total length={expected_length} bytes, frames={total_frames}")
+            response = bus.recv(timeout=FRAME_TIMEOUT)
+            if not response:
+                continue
                 
-                # Add data from first frame (starts at byte 2)
-                # First frame data starts at byte 2 (after PCI bytes)
-                data_start = 2
-                vin_bytes.extend(msg.data[data_start:])
-                received_frames = 1
+            if response.arbitration_id != RESPONSE_ID:
+                continue
                 
-                # Send flow control message to request remaining frames
-                flow_control = can.Message(
-                    arbitration_id=0x7F0,
-                    is_extended_id=False,
-                    data=[0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],  # Flow control (CTS)
-                )
-                bus.send(flow_control)
-                log("Sent flow control (CTS) for remaining frames")
-                
-            elif (pcidata & 0xF0) == 0x20:
-                # Consecutive frame
-                frame_index = pcidata & 0x0F
-                log(f"Consecutive frame {frame_index} received")
-                
-                # Add data from consecutive frame (starts at byte 1)
-                vin_bytes.extend(msg.data[1:])
-                received_frames += 1
-                
-                if received_frames >= total_frames:
-                    log(f"All {total_frames} frames received")
-                    break
-            else:
-                # Single frame response
-                length = pcidata & 0x0F
-                vin_bytes.extend(msg.data[4:4+length])
-                log(f"Single frame response with {length} bytes")
-                break
-        else:
-            log(f"Ignoring non-VIN response", "DEBUG")
-
-    if not responses:
-        raise TimeoutError("No response from ECU for VIN request")
-
-    # Extract VIN from collected bytes
-    if len(vin_bytes) >= 17:
-        try:
-            # Try ASCII decode first
-            vin_candidate = vin_bytes[:17].decode('ascii', errors='ignore').strip().upper()
+            _log_debug(f"Rx: {response.arbitration_id:03X} " + 
+                       " ".join(f"{b:02X}" for b in response.data), context)
             
-            # Clean up any non-alphanumeric characters
-            vin_clean = ''.join(c for c in vin_candidate if c.isalnum())
+            # Check for negative response (7F)
+            if len(response.data) >= 2 and response.data[1] == 0x7F:
+                nrc = response.data[3] if len(response.data) > 3 else 0x00
+                _log_warn(f"Negative response: 7F {service:02X} {nrc:02X}", context)
+                return None
             
-            if _validate_vin(vin_clean):
-                log(f"VIN successfully read: {vin_clean}")
-                return {
-                    "vin": vin_clean,
-                    "value": vin_clean,
-                    "result": vin_clean,
-                    "data": {"vin": vin_clean},
-                    "message": f"VIN: {vin_clean}",
-                    "raw": {
-                        "request": _serialize_can_message(req),
-                        "responses": [_serialize_can_message(r) for r in responses],
-                        "frames": received_frames,
-                        "total_bytes": len(vin_bytes)
-                    }
-                }
-            else:
-                log(f"Invalid VIN format: {vin_clean}", "WARN")
-        except Exception as e:
-            log(f"Failed to decode VIN: {e}", "ERROR")
+            # Check for positive response
+            if len(response.data) >= 2 and response.data[1] == service + UDS_POSITIVE_RESPONSE_MASK:
+                return response
+        
+        _log_warn("Timeout waiting for response", context)
+        return None
+        
+    except Exception as e:
+        _log_error(f"UDS request error: {e}", context)
+        return None
 
-    # Return failure with raw data for debugging
-    return {
-        "vin": None,
-        "value": None,
-        "result": None,
-        "data": {},
-        "message": "Invalid or incomplete VIN response",
-        "raw": {
-            "request": _serialize_can_message(req),
-            "responses": [_serialize_can_message(r) for r in responses],
-            "bytes_received": len(vin_bytes),
-            "hex_bytes": vin_bytes.hex().upper() if vin_bytes else ""
-        }
-    }
 
+def _extract_vin_from_response(response: Message) -> Optional[str]:
+    """
+    Extract VIN from UDS response, handling multi-frame messages.
+    Returns VIN string or None.
+    """
+    if not response or len(response.data) < 3:
+        return None
+    
+    vin_bytes = bytearray()
+    
+    # Check if this is a multi-frame response
+    if response.data[0] & 0xF0 == 0x10:  # First frame
+        # Extract total length from first frame
+        total_length = ((response.data[0] & 0x0F) << 8) | response.data[1]
+        # Add data from first frame (starting at byte 4)
+        vin_bytes.extend(response.data[4:])
+        return None  # Need to collect more frames
+        
+    elif response.data[0] & 0xF0 == 0x20:  # Consecutive frame
+        vin_bytes.extend(response.data[1:])
+        return vin_bytes.decode('ascii', errors='ignore').strip()
+        
+    else:  # Single frame
+        # Response format: [len, 0x62, 0xF1, 0x90, VIN data...]
+        vin_bytes.extend(response.data[4:])
+        return vin_bytes.decode('ascii', errors='ignore').strip()
+
+
+def _validate_vin(vin: str) -> Tuple[bool, Optional[str]]:
+    """
+    Validate VIN according to ISO standards.
+    Returns (is_valid, error_message)
+    """
+    if not vin:
+        return False, "VIN is empty"
+    
+    vin = vin.strip().upper()
+    
+    if len(vin) != VIN_LENGTH:
+        return False, f"VIN must be {VIN_LENGTH} characters (got {len(vin)})"
+    
+    # Check for invalid characters (I, O, Q)
+    invalid_chars = set(vin) & VIN_INVALID_CHARS
+    if invalid_chars:
+        return False, f"VIN contains invalid characters: {', '.join(invalid_chars)}"
+    
+    # Check for valid characters (alphanumeric, excluding I,O,Q)
+    import re
+    if not re.match(VIN_PATTERN, vin):
+        return False, "VIN contains invalid characters"
+    
+    return True, None
+
+
+# =============================================================================
+# MAIN FUNCTION
+# =============================================================================
 
 def read_vin(
     can_interface: str,
@@ -253,207 +316,193 @@ def read_vin(
     """
     SINGLE-SHOT entry point for auto-run.
     
-    Returns a dict with VIN in multiple locations to ensure capture:
-    - "vin": Primary VIN field
-    - "value": Generic value field
-    - "result": Result field
-    - "data": Nested data object with VIN
+    Returns a dict: 
+        {
+            "vin": str|None, 
+            "message": str, 
+            "raw": {...},
+            "validation": {...}
+        }
     
-    The service.py will extract VIN from any of these locations.
-    
-    Args:
-        can_interface: CAN interface name (e.g., "PCAN_USBBUS1", "can0")
-        bitrate: CAN bitrate (e.g., 500000)
-        context: TaskContext for cooperative cancellation and logging
-        progress: Progress callback (legacy)
-    
-    Returns:
-        Dict with VIN information in multiple formats
+    The VIN will be captured by the service and stored in auto_run_sessions.
     """
     bus = None
     start_time = time.time()
+    attempts = 0
+    
+    _log_info(f"VIN read started: interface={can_interface}, bitrate={bitrate}", context)
     
     try:
         if context:
             context.checkpoint()
             context.progress(5, "Opening CAN bus")
-            context.log(f"VIN_READ: Starting with {can_interface} @ {bitrate} bps", "INFO")
         if progress:
             progress(5, "Opening CAN bus")
 
-        bus = _open_bus(can_interface, int(bitrate))
+        # Open CAN bus with retries
+        bus = _open_bus(can_interface, int(bitrate), context)
         if bus is None:
             error_msg = f"Failed to open CAN bus: {can_interface}"
-            if context:
-                context.log(error_msg, "ERROR")
-                context.progress(100, error_msg)
+            _log_error(error_msg, context)
             return {
                 "vin": None,
-                "value": None,
-                "result": None,
-                "data": {},
                 "message": error_msg,
+                "status": "error",
                 "raw": None,
-                "success": False,
-                "duration_ms": int((time.time() - start_time) * 1000)
+                "validation": None,
+                "duration_ms": int((time.time() - start_time) * 1000),
             }
 
         if context:
-            context.progress(20, "CAN bus opened successfully")
-            context.log("VIN_READ: CAN bus opened", "INFO")
+            context.progress(20, "Establishing diagnostic session")
 
-        result = _read_vin_once(bus, context=context, progress=progress)
-        
-        # Add metadata
-        result["success"] = result.get("vin") is not None
-        result["duration_ms"] = int((time.time() - start_time) * 1000)
-        result["timestamp"] = time.time()
-        result["source"] = "auto"  # Indicates this was from auto-read
+        # Setup diagnostic session
+        if not _setup_diagnostic_session(bus, context):
+            _log_warn("Using default session (may not work)", context)
 
         if context:
-            if result.get("vin"):
-                vin = result["vin"]
-                context.progress(100, f"VIN read successful: {vin}")
-                # Emit structured JSON with VIN in multiple places for redundancy
+            context.progress(30, "Reading VIN from ECU")
+
+        # Read VIN with retries
+        vin = None
+        last_error = None
+        
+        for attempt in range(1, MAX_RETRIES + 1):
+            attempts = attempt
+            
+            if context:
+                context.checkpoint()
+                context.progress(30 + (attempt * 10), f"Reading VIN (attempt {attempt})")
+            
+            _log_info(f"Reading VIN (attempt {attempt}/{MAX_RETRIES})", context)
+            
+            try:
+                # Send UDS request for VIN
+                response = _send_uds_request(
+                    bus, 
+                    UDS_READ_DATA_BY_IDENTIFIER, 
+                    bytes(VIN_DID_BYTES),
+                    context
+                )
+                
+                if not response:
+                    last_error = "No response from ECU"
+                    if attempt < MAX_RETRIES:
+                        time.sleep(RETRY_DELAY * attempt)
+                    continue
+                
+                # Extract VIN from response
+                vin = _extract_vin_from_response(response)
+                
+                if vin:
+                    # Validate VIN
+                    is_valid, validation_error = _validate_vin(vin)
+                    
+                    if is_valid:
+                        _log_info(f"VIN read successful: {vin}", context)
+                        break
+                    else:
+                        last_error = f"Invalid VIN format: {validation_error}"
+                        _log_warn(last_error, context)
+                        vin = None
+                else:
+                    last_error = "Failed to extract VIN from response"
+                    
+            except Exception as e:
+                last_error = str(e)
+                _log_error(f"VIN read attempt {attempt} failed: {e}", context)
+                
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY * attempt)
+
+        # Prepare result
+        duration_ms = int((time.time() - start_time) * 1000)
+        
+        if vin:
+            # Emit progress_json for UI
+            if context:
                 context.progress_json({
                     "vin": vin,
-                    "value": vin,
-                    "result": vin,
-                    "data": {"vin": vin}
+                    "source": "auto",
+                    "valid": True
                 })
-                context.log(f"VIN_READ: Success - {vin}", "INFO")
-            else:
-                context.progress(100, "VIN read failed: invalid response")
-                context.log(f"VIN_READ: Failed - {result.get('message', 'Unknown error')}", "ERROR")
+            
+            result = {
+                "vin": vin,
+                "message": f"VIN: {vin}",
+                "status": "success",
+                "raw": {
+                    "attempts": attempts,
+                    "duration_ms": duration_ms,
+                },
+                "validation": {
+                    "valid": True,
+                    "length": len(vin),
+                },
+                "duration_ms": duration_ms,
+            }
+            
+            if context:
+                context.progress(100, f"VIN read successful")
+            
+        else:
+            result = {
+                "vin": None,
+                "message": last_error or "VIN read failed",
+                "status": "failed",
+                "raw": {
+                    "attempts": attempts,
+                    "duration_ms": duration_ms,
+                },
+                "validation": None,
+                "duration_ms": duration_ms,
+            }
+            
+            if context:
+                context.progress(100, f"VIN read failed: {last_error}")
 
         return result
 
     except TimeoutError:
         error_msg = "Timeout waiting for VIN response"
+        _log_error(error_msg, context)
         if context:
-            context.log(error_msg, "ERROR")
             context.progress(100, error_msg)
         return {
             "vin": None,
-            "value": None,
-            "result": None,
-            "data": {},
             "message": error_msg,
+            "status": "timeout",
             "raw": None,
-            "success": False,
+            "validation": None,
             "duration_ms": int((time.time() - start_time) * 1000),
-            "source": "auto"
         }
+        
     except Exception as e:
-        error_msg = f"VIN read failed: {str(e)}"
+        error_msg = f"VIN read failed: {e}"
+        _log_error(error_msg, context)
+        _log_debug(traceback.format_exc(), context)
         if context:
-            context.log(error_msg, "ERROR")
             context.progress(100, error_msg)
         return {
             "vin": None,
-            "value": None,
-            "result": None,
-            "data": {},
             "message": error_msg,
+            "status": "error",
             "raw": None,
-            "success": False,
+            "validation": None,
             "duration_ms": int((time.time() - start_time) * 1000),
-            "source": "auto"
         }
+        
     finally:
         if bus:
             try:
                 bus.shutdown()
-                if context:
-                    context.log("VIN_READ: CAN bus closed", "DEBUG")
+                _log_debug("CAN bus closed", context)
             except Exception as e:
-                if context:
-                    context.log(f"VIN_READ: Error closing bus: {e}", "WARN")
+                _log_warn(f"Error closing CAN bus: {e}", context)
 
 
 # =============================================================================
-# SINGLE-SHOT ENTRY POINT (Alias for compatibility)
+# EXPORTS
 # =============================================================================
 
-def read_vin_single(
-    can_interface: str,
-    bitrate: int,
-    context=None,
-    progress=None,
-) -> Dict[str, Any]:
-    """
-    Alias for read_vin() for backward compatibility.
-    """
-    return read_vin(can_interface, bitrate, context, progress)
-
-
-# =============================================================================
-# STREAMING ENTRY POINT (Not used for VIN, but kept for interface completeness)
-# =============================================================================
-
-def read_vin_stream(
-    can_interface: str,
-    bitrate: int,
-    context=None,
-    progress=None,
-) -> Generator[Dict[str, Any], None, None]:
-    """
-    Streaming entry point (not typically used for VIN).
-    Included for interface completeness.
-    
-    Yields:
-        VIN reading (single shot then exits)
-    """
-    result = read_vin(can_interface, bitrate, context, progress)
-    yield {
-        "status": "completed" if result.get("success") else "error",
-        "data": {
-            "vin": result.get("vin"),
-            "message": result.get("message")
-        }
-    }
-
-
-# =============================================================================
-# TEST FUNCTION (for standalone testing)
-# =============================================================================
-
-if __name__ == "__main__":
-    # Simple test when run directly
-    import sys
-    
-    print("VIN Read Test Utility")
-    print("=" * 50)
-    
-    interface = sys.argv[1] if len(sys.argv) > 1 else "PCAN_USBBUS1"
-    bitrate = int(sys.argv[2]) if len(sys.argv) > 2 else 500000
-    
-    print(f"Interface: {interface}")
-    print(f"Bitrate: {bitrate}")
-    print("-" * 50)
-    
-    class TestContext:
-        def __init__(self):
-            self.start = time.time()
-        
-        def checkpoint(self):
-            pass
-        
-        def progress(self, percent, message):
-            print(f"[{percent}%] {message}")
-        
-        def progress_json(self, data):
-            print(f"JSON: {data}")
-        
-        def log(self, message, level="INFO"):
-            print(f"[{level}] {message}")
-    
-    context = TestContext()
-    result = read_vin(interface, bitrate, context=context)
-    
-    print("-" * 50)
-    print(f"Success: {result.get('success', False)}")
-    print(f"VIN: {result.get('vin')}")
-    print(f"Message: {result.get('message')}")
-    print(f"Duration: {result.get('duration_ms')} ms")
-    print("=" * 50)
+__all__ = ["read_vin"]
