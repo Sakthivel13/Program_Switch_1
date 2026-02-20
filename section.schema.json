@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nirix.tvsmotor.com/schema/section.schema.json",
+  "title": "Vehicle Section Tests Definition",
+  "description": "Defines sections (Diagnostics/Vehicle Health) and their contents for a vehicle",
+  "type": "object",
+  "required": ["vehicle", "sections"],
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "default": "1.0"
+    },
+
+    "vehicle": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Vehicle model name (must match app.vehicles.name)"
+    },
+
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/section" }
+    }
+  },
+
+  "additionalProperties": false,
+
+  "$defs": {
+    "section": {
+      "type": "object",
+      "required": ["name", "slug", "section_type"],
+
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Display name (e.g., 'Diagnostics', 'Vehicle Health Report')"
+        },
+
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+$",
+          "description": "URL-safe identifier"
+        },
+
+        "section_type": {
+          "type": "string",
+          "enum": ["diagnostics", "vehicle_health"],
+          "description": "Maps to app.vehicle_sections.section_type"
+        },
+
+        "description": {
+          "type": ["string", "null"],
+          "description": "Section description"
+        },
+
+        "icon": {
+          "type": ["string", "null"],
+          "description": "Icon class or path (e.g., fa-stethoscope)"
+        },
+
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+
+        "auto_run_programs": {
+          "type": "array",
+          "description": "Programs to run automatically when entering this section",
+          "items": { "$ref": "#/$defs/auto_run_program" },
+          "default": []
+        },
+
+        "is_active": {
+          "type": "boolean",
+          "default": true
+        },
+
+        "ecus": {
+          "type": "array",
+          "description": "ECU code list (typically for diagnostics section)",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ECU code reference (links to ecu_tests.json)"
+          },
+          "default": []
+        },
+
+        "health_tabs": {
+          "type": "array",
+          "description": "Health report tabs (typically for vehicle_health section)",
+          "items": { "$ref": "#/$defs/health_tab" },
+          "default": []
+        }
+      },
+
+      "additionalProperties": false
+    },
+
+    "auto_run_program": {
+      "type": "object",
+      "required": ["program_id", "module_name", "function_name"],
+
+      "properties": {
+        "program_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Logical program ID; also used as test_id for persistence/logging"
+        },
+
+        "program_name": {
+          "type": "string",
+          "description": "Friendly name for the program"
+        },
+
+        "program_type": {
+          "type": "string",
+          "enum": ["single", "stream"],
+          "default": "single",
+          "description": "High-level type used by runner auto-run session (single-shot vs streaming)"
+        },
+
+        "module_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Python module name (without .py) inside Auto_Run or Diagnostics/Auto_Run"
+        },
+
+        "function_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Python function name inside the module"
+        },
+
+        "execution_mode": {
+          "type": "string",
+          "enum": ["single", "stream", "flash", "flashing", "live"],
+          "default": "single",
+          "description": "Execution mode passed into ExecutionContext (mapped by loader._map_execution_mode)"
+        },
+
+        "display_type": {
+          "type": "string",
+          "description": "UI hint for how to display result (e.g., 'text', 'numeric', 'gauge', 'status')"
+        },
+
+        "display_label": {
+          "type": "string",
+          "description": "Label shown in UI (e.g., 'Battery Voltage')"
+        },
+
+        "display_unit": {
+          "type": ["string", "null"],
+          "description": "Optional unit label (e.g., 'V')"
+        },
+
+        "display_pages": {
+          "type": "array",
+          "description": "Where in the UI this auto-run result should be shown",
+          "items": {
+            "type": "string",
+            "enum": ["section", "ecu", "parameter"]
+          },
+          "default": ["section", "ecu", "parameter"]
+        },
+
+        "ecu_targets": {
+          "type": "array",
+          "description": "List of ECU codes that this auto-run program targets (used for ECU-specific Auto_Run folders)",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "default": []
+        },
+
+        "output_limits": {
+          "type": "array",
+          "description": "Optional LSL/USL limits for the auto-run program output",
+          "items": { "$ref": "#/$defs/output_limit" },
+          "default": []
+        },
+
+        "fallback_action": {
+          "type": "string",
+          "enum": ["none", "manual_input", "warn_and_continue", "block"],
+          "default": "none",
+          "description": "What to do if the auto-run fails"
+        },
+
+        "fallback_input": {
+          "description": "Optional config for manual input when fallback_action is 'manual_input'",
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+
+        "log_as_vin": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, result_value is treated as VIN in auto-run session"
+        },
+
+        "is_required": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, section entry is blocked on failure"
+        },
+
+        "timeout_sec": {
+          "type": "number",
+          "minimum": 0,
+          "default": 15,
+          "description": "Timeout in seconds for this auto-run program (0 = no timeout, run indefinitely)"
+        },
+
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Display and execution ordering for auto-run programs"
+        }
+      },
+
+      "additionalProperties": false
+    },
+
+    "output_limit": {
+      "type": "object",
+      "required": ["signal"],
+
+      "properties": {
+        "signal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Signal name in the program output (e.g., 'battery_voltage')"
+        },
+        "lsl": {
+          "type": ["number", "null"],
+          "description": "Lower specification limit (inclusive)"
+        },
+        "usl": {
+          "type": ["number", "null"],
+          "description": "Upper specification limit (inclusive)"
+        },
+        "unit": {
+          "type": ["string", "null"],
+          "description": "Optional unit (e.g., 'V')"
+        }
+      },
+
+      "additionalProperties": false
+    },
+
+    "health_tab": {
+      "type": "object",
+      "required": ["folder_code", "folder_name"],
+
+      "properties": {
+        "folder_code": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "description": "Maps to app.vehicle_health_folders.folder_code"
+        },
+
+        "folder_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tab display name - maps to folder_name"
+        },
+
+        "description": {
+          "type": ["string", "null"],
+          "description": "Tab description"
+        },
+
+        "execution_class": {
+          "type": "string",
+          "enum": ["STREAM", "SINGLE", "FLASH", "DUAL"],
+          "default": "SINGLE",
+          "description": "Maps to app.vehicle_health_folders.execution_class"
+        },
+
+        "icon": {
+          "type": ["string", "null"],
+          "description": "Icon class or path"
+        },
+
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+
+        "is_active": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+
+      "additionalProperties": false
+    }
+  }
+}
