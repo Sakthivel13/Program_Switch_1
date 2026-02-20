@@ -3,16 +3,16 @@
 NIRIX DIAGNOSTICS – MAIN WEB APPLICATION (PostgreSQL Production)
 FULLY INTEGRATED WITH UPDATED LOADER, SERVICE, RUNNER, AND SCANNER (OpenCV)
 
-Version: 3.3.0
-Last Updated: 2026-02-19
+Version: 3.1.0
+Last Updated: 2026-02-14
 
-FIXES IN v3.3.0
+FIXES IN v3.1.0
 ────────────────
-- FIX-100: Fixed auto_run_sessions status check constraint violation
-- FIX-101: Enhanced VIN capture and display across all pages
-- FIX-102: Improved session cleanup with proper status handling
-- FIX-103: Added better error recovery for database operations
-- FIX-104: Fixed manual VIN submission with proper validation
+- FIX-30: Stream values API endpoint - ensures auto_run_stream_values are queryable
+- FIX-31: Auto-run session VIN persistence - VIN displays correctly in UI
+- FIX-32: Enhanced error handling for stream value polling
+- FIX-33: Added stream values cleanup on session end
+- FIX-34: Improved debug logging for troubleshooting
 """
 
 # =============================================================================
@@ -80,7 +80,6 @@ from diagnostics.loader import (
     get_ecus_from_json,
     get_parameters_from_json,
     get_auto_run_programs,
-    get_ecu_auto_run_config,
 
     # Exceptions
     VehicleNotFoundError,
@@ -89,7 +88,7 @@ from diagnostics.loader import (
 )
 
 from diagnostics.runner import (
-    # Task management APIs
+    # Task management APIs (used by website endpoints)
     get_task_status,
     cancel_task,
     pause_task,
@@ -103,23 +102,20 @@ from diagnostics.runner import (
     get_active_task_count,
     get_runner_stats,
 
-    # Batch execution
+    # Batch (optional endpoint)
     execute_batch_async,
     get_batch_status,
     cancel_batch,
 
-    # Auto-run session helpers
-    get_ecu_status_from_session,
-
-    # Runner types
+    # Runner types (optional)
     ExecutionContext,
 )
 
 from diagnostics.service import (
     # Main DB-authoritative execution API
     run_test,
-    start_auto_run,
-    run_auto_programs,
+    start_auto_run,              # new-style auto-run sessions
+    run_auto_programs,           # legacy auto-run (kept for compat)
 
     run_all_tests_for_parameter,
 
@@ -147,7 +143,7 @@ from diagnostics.service import (
     # Progress callback registration
     register_progress_callback,
 
-    # Auto-run VIN submission
+    # Auto-run VIN submission (needed by tests.html manual VIN popup)
     submit_auto_run_vin,
 )
 
@@ -156,6 +152,7 @@ from diagnostics.service import (
 # =============================================================================
 SCANNER_AVAILABLE = False
 try:
+    # New scanner.py supports optional preview
     from diagnostics.scanner import (
         start_scan, get_scan, cancel_scan,
         get_scan_frame_jpeg, cleanup_scans
@@ -232,98 +229,6 @@ if VALIDATE_ON_START:
         print(f"[STARTUP] Warning: Test validation failed: {e}")
 else:
     print("[STARTUP] Validation disabled (NIRIX_VALIDATE_ON_START=false)")
-
-# =============================================================================
-# FIX-100: FIX DATABASE STATUS CONSTRAINTS
-# =============================================================================
-def _fix_database_constraints():
-    """Fix database constraints to ensure compatibility."""
-    try:
-        # Check if auto_run_sessions table exists
-        table_check = query_one("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'app' 
-                AND table_name = 'auto_run_sessions'
-            )
-        """)
-        
-        if table_check and table_check.get('exists'):
-            # Drop and recreate the status check constraint to include 'expired'
-            execute("""
-                ALTER TABLE app.auto_run_sessions 
-                DROP CONSTRAINT IF EXISTS auto_run_sessions_status_check
-            """)
-            
-            execute("""
-                ALTER TABLE app.auto_run_sessions 
-                ADD CONSTRAINT auto_run_sessions_status_check 
-                CHECK (status IN ('running', 'started', 'completed', 'failed', 'stopped', 'expired'))
-            """)
-            
-            print("[STARTUP] Database constraints fixed: auto_run_sessions_status_check updated")
-    except Exception as e:
-        print(f"[STARTUP] Warning: Could not fix database constraints: {e}")
-
-# Run constraint fix
-_fix_database_constraints()
-
-# =============================================================================
-# FIX-102: DATABASE INDEX OPTIMIZATION
-# =============================================================================
-def _ensure_database_indexes():
-    """Create necessary indexes for performance if they don't exist."""
-    try:
-        # Indexes for auto-run tables
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_auto_run_sessions_vehicle 
-            ON app.auto_run_sessions(vehicle_id)
-        """)
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_auto_run_sessions_user 
-            ON app.auto_run_sessions(user_id)
-        """)
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_auto_run_sessions_status 
-            ON app.auto_run_sessions(status)
-        """)
-        
-        # Indexes for stream values
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_auto_run_stream_values_session 
-            ON app.auto_run_stream_values(session_id)
-        """)
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_auto_run_stream_values_updated 
-            ON app.auto_run_stream_values(updated_at)
-        """)
-        
-        # Indexes for ECU status
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_ecu_active_status_session 
-            ON app.ecu_active_status(session_id)
-        """)
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_ecu_active_status_ecu 
-            ON app.ecu_active_status(ecu_code)
-        """)
-        
-        # Indexes for test results
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_test_execution_results_test_id 
-            ON app.test_execution_results(test_id)
-        """)
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_test_execution_results_created 
-            ON app.test_execution_results(created_at)
-        """)
-        
-        print("[STARTUP] Database indexes verified/created")
-    except Exception as e:
-        print(f"[STARTUP] Warning: Could not create indexes: {e}")
-
-# Run index creation
-_ensure_database_indexes()
 
 # =============================================================================
 # PATHS & DIRECTORIES
@@ -616,75 +521,30 @@ def _before_request():
         update_live_system()
 
 # =============================================================================
-# FIX-102: IMPROVED PERIODIC CLEANUP
+# PERIODIC CLEANUP
 # =============================================================================
 def _start_cleanup_thread():
     def cleanup_loop():
         import time as _time
         while True:
             try:
-                _time.sleep(300)  # Run every 5 minutes
-                
-                # Clean up completed tasks
-                removed_tasks = purge_completed_tasks()
-                if removed_tasks > 0:
-                    append_global_log(f"Cleaned up {removed_tasks} completed tasks", "DEBUG")
-
-                # FIX-100: Properly handle status with check constraint
-                try:
-                    # First, check if the constraint exists
-                    constraint_check = query_one("""
-                        SELECT conname 
-                        FROM pg_constraint 
-                        WHERE conrelid = 'app.auto_run_sessions'::regclass
-                        AND conname = 'auto_run_sessions_status_check'
-                    """)
-                    
-                    if constraint_check:
-                        # Use 'failed' instead of 'expired' if 'expired' not in constraint
-                        # But we already fixed the constraint, so 'expired' is valid
-                        execute("""
-                            UPDATE app.auto_run_sessions 
-                            SET status = 'expired' 
-                            WHERE status IN ('running', 'started') 
-                            AND started_at < NOW() - INTERVAL '1 hour'
-                        """)
-                        rows_affected = query_one("SELECT count(*) as cnt FROM app.auto_run_sessions WHERE status = 'expired' AND updated_at > NOW() - INTERVAL '5 minutes'")
-                        if rows_affected and rows_affected.get('cnt', 0) > 0:
-                            append_global_log(f"Marked {rows_affected['cnt']} old sessions as expired", "DEBUG")
-                    else:
-                        # Fallback to 'failed' if constraint not fixed
-                        execute("""
-                            UPDATE app.auto_run_sessions 
-                            SET status = 'failed' 
-                            WHERE status IN ('running', 'started') 
-                            AND started_at < NOW() - INTERVAL '1 hour'
-                        """)
-                except Exception as e:
-                    app.logger.warning(f"Session cleanup failed: {e}")
-
-                # Clean up old stream values (older than 1 hour)
-                try:
-                    result = execute("""
-                        DELETE FROM app.auto_run_stream_values
-                        WHERE updated_at < NOW() - INTERVAL '1 hour'
-                    """)
-                    append_global_log("Cleaned up old stream values", "DEBUG")
-                except Exception as e:
-                    app.logger.warning(f"Stream values cleanup failed: {e}")
-
-                # Clean up old ECU status (older than 1 hour)
-                try:
-                    result = execute("""
-                        DELETE FROM app.ecu_active_status
-                        WHERE updated_at < NOW() - INTERVAL '1 hour'
-                    """)
-                except Exception as e:
-                    app.logger.warning(f"ECU status cleanup failed: {e}")
+                _time.sleep(300)
+                removed = purge_completed_tasks()
+                if removed > 0:
+                    append_global_log(f"Cleaned up {removed} completed tasks", "DEBUG")
 
                 # Optional scanner cleanup
                 if SCANNER_AVAILABLE and cleanup_scans is not None:
                     cleanup_scans(max_age_sec=300)
+
+                # FIX-33: Clean up old stream values (older than 1 hour)
+                try:
+                    execute("""
+                        DELETE FROM app.auto_run_stream_values
+                        WHERE updated_at < NOW() - INTERVAL '1 hour'
+                    """)
+                except Exception as e:
+                    app.logger.warning(f"Stream values cleanup failed: {e}")
 
             except Exception as e:
                 app.logger.error(f"Cleanup error: {e}")
@@ -739,10 +599,6 @@ def audit_routes(app_instance: Flask):
         "forgot_pin",
         "reset_pin_verify",
         "reset_pin_new",
-        "api_auto_run_status",
-        "api_auto_run_vin",
-        "api_get_stream_values",
-        "api_get_ecu_status",
     ]
 
     missing = [ep for ep in REQUIRED_ENDPOINTS if ep not in endpoints]
@@ -1089,7 +945,7 @@ def tests_page(model_name):
     return redirect(url_for("tests_root", model=model_name))
 
 # =============================================================================
-# FIX-101: TESTS PAGE WITH VIN DISPLAY SUPPORT
+# TESTS PAGE (HIERARCHICAL NAVIGATION - MAIN ROUTE)
 # =============================================================================
 @app.route("/tests")
 def tests_root():
@@ -1105,7 +961,7 @@ def tests_root():
     ecu = (request.args.get("ecu") or "").strip()
     parameter = (request.args.get("parameter") or "").strip()
 
-    # FIX-101: VIN display support from auto-run session
+    # FIX-31: VIN display support (passed from auto-run UI)
     auto_run_session_id = (request.args.get("auto_run_session_id") or "").strip()
     current_vin: Optional[str] = None
     current_vin_source: Optional[str] = None
@@ -1221,7 +1077,7 @@ def tests_root():
             parameter=None,
             tests=[],
             vehicles=[],
-            # VIN context - CRITICAL for display
+            # VIN context
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1242,7 +1098,7 @@ def tests_root():
             parameter=None,
             tests=[],
             vehicles=[],
-            # VIN context - CRITICAL for display
+            # VIN context
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1263,7 +1119,7 @@ def tests_root():
             parameter=None,
             tests=[],
             vehicles=[],
-            # VIN context - CRITICAL for display
+            # VIN context
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1303,7 +1159,7 @@ def tests_root():
             parameter=parameter,
             tests=tests,
             vehicles=[],
-            # VIN context - CRITICAL for display
+            # VIN context
             current_vin=current_vin,
             auto_run_session_id=auto_run_session_id,
         )
@@ -1319,6 +1175,8 @@ def api_run_test():
     DB-authoritative execution:
     Payload:
       { "vehicle_name": "...", "test_id": "...", "user_inputs": {...} }
+
+    Backward compatible: ignores extra fields like section/ecu/parameter if provided.
     """
     if "user" not in session:
         return jsonify({"ok": False, "error": "not_authenticated"}), 401
@@ -1351,12 +1209,12 @@ def api_run_test():
     return jsonify(result), 400
 
 # =============================================================================
-# API: RUN ALL TESTS (BATCH EXECUTION)
+# API: RUN ALL TESTS (BATCH EXECUTION) - OPTIONAL / BACKWARD COMPAT
 # =============================================================================
 @app.route("/api/run_all_tests", methods=["POST"])
 def api_run_all_tests():
     """
-    Batch execution endpoint.
+    Batch execution endpoint (optional; not required by new tests.html).
     Payload:
     {
         "vehicle_name": "...",
@@ -1446,7 +1304,7 @@ def api_run_all_tests():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
-# API: RUN AUTO-RUN PROGRAMS (SECTION ENTRY)
+# API: RUN AUTO-RUN PROGRAMS (SECTION ENTRY) - NEW AUTO-RUN SESSIONS
 # =============================================================================
 @app.route("/api/run_auto_programs", methods=["POST"])
 def api_run_auto_programs():
@@ -1491,6 +1349,7 @@ def api_run_auto_programs():
     )
 
     if not result.get("ok"):
+        # Always return ok:false with error string for fail-closed UI logic
         return jsonify({"ok": False, "error": result.get("error", "AUTO_RUN_FAILED"), "details": result}), 400
 
     programs = result.get("programs") or []
@@ -1513,7 +1372,7 @@ def api_run_auto_programs():
     })
 
 # =============================================================================
-# FIX-104: API: AUTO-RUN MANUAL VIN SUBMISSION
+# API: AUTO-RUN MANUAL VIN SUBMISSION (tests.html expects this)
 # =============================================================================
 @app.route("/api/auto_run/vin", methods=["POST"])
 def api_auto_run_vin():
@@ -1542,35 +1401,26 @@ def api_auto_run_vin():
         return jsonify({"ok": False, "error": "vin_contains_invalid_chars"}), 400
 
     try:
-        result = submit_auto_run_vin(session_id, program_id, vin)
-        
-        # Update session VIN in database
-        if result.get("ok"):
-            execute("""
-                UPDATE app.auto_run_sessions
-                SET vin = :vin, vin_source = 'manual', vin_input_needed = FALSE
-                WHERE session_id = :sid
-            """, {"sid": session_id, "vin": vin})
-            
-            app.logger.info(f"Manual VIN {vin} saved for session {session_id}")
-            
-        return jsonify(result)
+        return jsonify(submit_auto_run_vin(session_id, program_id, vin))
     except Exception as e:
         app.logger.exception("Manual VIN submission failed")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
-# API: AUTO-RUN SESSION STATUS
+# API: AUTO-RUN SESSION STATUS (OPTIONAL)
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/status")
 def api_auto_run_status(session_id: str):
     """
     Return auto-run session status in the shape expected by tests.html.
+
+    Service is authoritative for live state (task_ids, results, blocking_programs,
+    live_task_statuses). We optionally include DB snapshot under `db_session`.
     """
     if "user" not in session:
         return jsonify({"ok": False, "error": "not_authenticated"}), 401
 
-    # 1) Live status from service
+    # 1) Live status from service (what the UI expects)
     try:
         live = svc_get_auto_run_status(session_id)
         if not live or live.get("ok") is not True:
@@ -1579,7 +1429,7 @@ def api_auto_run_status(session_id: str):
         app.logger.exception("Failed to get auto-run live status")
         return jsonify({"ok": False, "error": str(e)}), 500
 
-    # 2) Add DB snapshot with VIN
+    # 2) Optional DB snapshot (VIN persistence, timestamps, etc.)
     try:
         row = query_one("""
             SELECT session_id, vehicle_id, vehicle_name, section_type,
@@ -1590,28 +1440,26 @@ def api_auto_run_status(session_id: str):
         """, {"sid": session_id})
         if row:
             live["db_session"] = dict(row)
-            # Ensure VIN is included in the response
-            if row.get("vin"):
-                live["vin"] = row["vin"]
-                live["vin_source"] = row["vin_source"]
     except Exception as e:
+        # Don't fail the endpoint if DB snapshot fails
         app.logger.warning(f"Failed to load DB auto_run_session snapshot: {e}")
 
     return jsonify(live)
 
 # =============================================================================
-# API: AUTO-RUN STREAM VALUES
+# FIX-30: API: AUTO-RUN STREAM VALUES (FOR LIVE DISPLAY)
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/stream_values")
 def api_get_stream_values(session_id: str):
     """
     Return the latest stream values for a session.
-    Used by UI to show live battery voltage.
+    Used by UI to show live battery voltage, etc.
     """
     if "user" not in session:
         return jsonify({"ok": False, "error": "not_authenticated"}), 401
     
     try:
+        # FIX-32: Enhanced error handling and logging
         app.logger.debug(f"Fetching stream values for session {session_id}")
         
         # Fetch latest values for this session
@@ -1634,6 +1482,7 @@ def api_get_stream_values(session_id: str):
         })
     except Exception as e:
         app.logger.error(f"Failed to fetch stream values for session {session_id}: {e}")
+        app.logger.error(traceback.format_exc())
         return jsonify({
             "ok": False, 
             "error": str(e),
@@ -1641,7 +1490,7 @@ def api_get_stream_values(session_id: str):
         }), 500
 
 # =============================================================================
-# API: ECU ACTIVE STATUS (FOR COLORED DOTS)
+# API: ECU ACTIVE STATUS
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/ecu_status")
 def api_get_ecu_status(session_id: str):
@@ -1668,7 +1517,7 @@ def api_get_ecu_status(session_id: str):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
-# API: SCAN (OpenCV station camera)
+# API: SCAN (OpenCV station camera) - start/status/cancel + optional frame
 # =============================================================================
 @app.post("/api/scan/start")
 def api_scan_start():
@@ -1730,7 +1579,7 @@ def api_scan_cancel(scan_id: str):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-# OPTIONAL: backend preview frame
+# OPTIONAL: backend preview frame (scanner.py must support get_scan_frame_jpeg)
 @app.get("/api/scan/<scan_id>/frame")
 def api_scan_frame(scan_id: str):
     if "user" not in session:
@@ -1748,7 +1597,7 @@ def api_scan_frame(scan_id: str):
         return ("", 204)
 
 # =============================================================================
-# API: RUN ALL FOR PARAMETER
+# API: RUN ALL FOR PARAMETER (SERVICE CONVENIENCE)
 # =============================================================================
 @app.route("/api/run_all_for_parameter", methods=["POST"])
 def api_run_all_for_parameter():
@@ -2211,7 +2060,7 @@ def health_check():
         "station": STATION_ID,
         "active_tasks": stats.get("tasks", {}).get("active", 0),
         "scanner_available": SCANNER_AVAILABLE,
-        "version": "3.3.0",
+        "version": "3.1.0",
     })
 
 # =============================================================================
@@ -2280,7 +2129,7 @@ if __name__ == "__main__":
         pass
 
     print("\n" + "=" * 60)
-    print("NIRIX Diagnostics v3.3.0")
+    print("NIRIX Diagnostics v3.1.0")
     print("URL: http://0.0.0.0:8000")
     print(f"Station ID: {STATION_ID}")
     print(f"Active Tasks: {get_active_task_count()}")
