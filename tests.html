@@ -115,33 +115,18 @@
     border-radius: 50%;
     margin-left: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    animation: pulse 2s infinite;
   }
   .ecu-status-dot.active {
     background: #10b981;
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
-    animation: pulse-green 2s infinite;
   }
   .ecu-status-dot.inactive {
     background: #ef4444;
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
-    animation: pulse-red 2s infinite;
   }
   .ecu-status-dot.unknown {
     background: #9ca3af;
     box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.2);
-  }
-
-  @keyframes pulse-green {
-    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-  }
-
-  @keyframes pulse-red {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
   }
 
   /* ===================== GRID LIST (CARDS) ===================== */
@@ -174,7 +159,6 @@
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    position: relative;
   }
   .tile:hover{
     border-color:#3b82f6;
@@ -452,8 +436,6 @@
   .field-error-message.active { display: block; }
 </style>
 
-<!-- Bootstrap Icons for better UI -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <script src="https://unpkg.com/html5-qrcode"></script>
 {% endblock %}
 
@@ -497,9 +479,7 @@
 {% set _vin = current_vin|default('') %}
 {% set _auto_run_session_id = auto_run_session_id|default('') %}
 
-<!-- ====================================================================== -->
-<!-- VEHICLE HERO STRIP (Shows on all pages)                               -->
-<!-- ====================================================================== -->
+{# Vehicle hero visible for all pages - VIN shows based on display_pages #}
 <div class="row justify-content-center mb-3">
   <div class="col-11 col-xl-10">
     <div class="rounded-strip card-shadow vehicle-hero">
@@ -528,7 +508,7 @@
             {% endif %}
             <!-- VIN shows on all pages because display_pages includes all -->
             {% if _vin %}
-              <div class="mt-2"><span class="vin-pill"><i class="bi bi-upc-scan"></i> VIN: <span class="mono">{{ _vin }}</span></span></div>
+              <div class="mt-2"><span class="vin-pill">VIN: <span class="mono">{{ _vin }}</span></span></div>
             {% endif %}
           </div>
         </div>
@@ -619,7 +599,7 @@
           <h5>Select ECU</h5>
           <div class="subtle-muted">{{ model_name }} · Diagnostics</div>
           {% if _vin %}
-            <div class="mt-2"><span class="vin-pill"><i class="bi bi-upc-scan"></i> VIN: <span class="mono">{{ _vin }}</span></span></div>
+            <div class="mt-2"><span class="vin-pill">VIN: <span class="mono">{{ _vin }}</span></span></div>
           {% endif %}
         </div>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('tests_root', model=model_name) }}">Back</a>
@@ -696,7 +676,7 @@
             {% if section == "diagnostics" %} · ECU: <strong>{{ ecu }}</strong>{% endif %}
           </div>
           {% if _vin %}
-            <div class="mt-2"><span class="vin-pill"><i class="bi bi-upc-scan"></i> VIN: <span class="mono">{{ _vin }}</span></span></div>
+            <div class="mt-2"><span class="vin-pill">VIN: <span class="mono">{{ _vin }}</span></span></div>
           {% endif %}
         </div>
         {% if section == "diagnostics" %}
@@ -811,7 +791,7 @@
               Test Sequence Page (DB-authoritative tests; filesystem only for execution)
             </div>
             {% if _vin %}
-              <div class="mt-2"><span class="vin-pill"><i class="bi bi-upc-scan"></i> VIN: <span class="mono">{{ _vin }}</span></span></div>
+              <div class="mt-2"><span class="vin-pill">VIN: <span class="mono">{{ _vin }}</span></span></div>
             {% endif %}
           </div>
 
@@ -830,7 +810,7 @@
         {% if _auto_run_session_id %}
         <div class="stream-panel">
           <div class="header">
-            <h6><i class="bi bi-activity"></i> Live Stream Values</h6>
+            <h6>Live Stream Values</h6>
             <span class="badge" id="streamCount">0 signals</span>
           </div>
           <div id="streamValuesContainer">
@@ -880,13 +860,11 @@
 <!-- MODALS                                                                 -->
 <!-- ====================================================================== -->
 
-<!-- Auto-Run Progress Modal -->
 <div class="modal fade" id="autoRunModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 id="autoRunTitle" class="modal-title"><i class="bi bi-gear"></i> Running Pre-checks</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header">
+        <h5 id="autoRunTitle" class="modal-title">Running Pre-checks</h5>
       </div>
       <div class="modal-body">
         <div class="alert flash-request" id="autoRunStatus">Starting auto-run programs...</div>
@@ -905,61 +883,38 @@
   </div>
 </div>
 
-<!-- Improved Manual VIN Modal with better UX -->
 <div class="modal fade" id="vinManualModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header bg-warning">
-        <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill"></i> Manual VIN Entry Required</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+      <div class="modal-header"><h5 class="modal-title">Enter VIN</h5></div>
       <div class="modal-body">
         <div class="alert alert-warning">
-          <i class="bi bi-exclamation-triangle-fill"></i>
-          VIN auto-read failed. Please enter the VIN manually or scan the QR/barcode.
+          VIN auto-read failed. Please enter VIN manually or scan QR/Barcode.
         </div>
 
-        <div class="mb-3">
-          <label class="form-label fw-bold">VIN (17 characters)</label>
-          <div class="input-group">
-            <input id="vinManualInput" class="form-control font-monospace text-uppercase" 
-                   maxlength="17" placeholder="e.g. MA1XX..." autocomplete="off"
-                   style="text-transform:uppercase">
-            <button id="vinScanBtn" class="btn btn-outline-primary" type="button">
-              <i class="bi bi-qr-code-scan"></i> Scan
-            </button>
-          </div>
-          <div class="form-text mt-1">
-            <small>VIN must be exactly 17 characters and cannot contain I, O, or Q.</small>
-          </div>
+        <label class="form-label">VIN (17 characters)</label>
+        <div class="input-group">
+          <input id="vinManualInput" class="form-control font-monospace" maxlength="17" placeholder="e.g. MA1XXXX..." autocomplete="off">
+          <button id="vinScanBtn" class="btn btn-outline-secondary" type="button">Scan</button>
         </div>
+        <div class="form-text">VIN excludes letters I, O, Q.</div>
 
-        <div id="vinManualError" class="alert alert-danger mt-3" style="display:none;">
-          <i class="bi bi-exclamation-circle-fill"></i> <span id="vinErrorMessage"></span>
-        </div>
-        
-        <div class="text-muted small mt-2">
-          <i class="bi bi-info-circle"></i> You can also use the scan button to capture a QR code or barcode.
-        </div>
+        <div id="vinManualError" class="alert alert-danger mt-3" style="display:none;"></div>
       </div>
       <div class="modal-footer">
-        <button id="vinManualSubmit" class="btn btn-primary">Submit VIN</button>
-        <button id="vinManualCancel" class="btn btn-outline-secondary">Cancel</button>
+        <button id="vinManualSubmit" class="btn btn-sm btn-primary">Submit</button>
+        <button id="vinManualCancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Scan Modal -->
 <div class="modal fade" id="scanModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header bg-info text-white">
-        <h5 class="modal-title"><i class="bi bi-qr-code-scan"></i> Scan QR / Barcode</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+      <div class="modal-header"><h5 class="modal-title">Scan QR / Barcode</h5></div>
       <div class="modal-body">
-        <div id="scanStatus" class="alert alert-info">Starting scanner...</div>
+        <div id="scanStatus" class="alert flash-request">Starting scanner...</div>
         <div class="small text-muted">
           Point the camera at the QR/Barcode. The value will auto-fill the field.
         </div>
@@ -1064,10 +1019,7 @@
 <div class="modal fade" id="flashingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header bg-danger text-white">
-        <h5 id="flashingModalTitle" class="modal-title"><i class="bi bi-lightning"></i> ECU Flashing</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+      <div class="modal-header"><h5 id="flashingModalTitle" class="modal-title">ECU Flashing</h5></div>
       <div class="modal-body text-center">
         <div id="flashingStatus" class="flash-start p-3 rounded mb-3">
           <strong>Flashing Started</strong>
@@ -1111,22 +1063,12 @@
 
 {% block scripts %}
 
-<!-- Helper function for logging -->
-<script>
-function _log_info(msg) {
-  console.log(`[UI] ${msg}`);
-}
-function _log_error(msg) {
-  console.error(`[UI] ${msg}`);
-}
-</script>
-
 {# ====================================================================== #}
 <!-- ECU Status Polling Script (Runs on all pages to update colored dots) -->
 {# ====================================================================== #}
 {% if model_name and _auto_run_session_id %}
 <script>
-// FIX-91: ECU Status Polling for Colored Dots
+// FIX-61: ECU Status Polling for Colored Dots
 const AUTO_RUN_SESSION_ID = "{{ _auto_run_session_id }}";
 
 async function pollEcuStatus() {
@@ -1144,12 +1086,6 @@ async function pollEcuStatus() {
                     dot.title = `ECU ${stat.is_active ? 'Active' : 'Inactive'} - Last response: ${stat.last_response || 'Never'}`;
                 });
             });
-            
-            // Also update any ECU tiles that might have been added dynamically
-            const ecuTiles = document.querySelectorAll('.js-ecu-tile');
-            if (ecuTiles.length > 0) {
-                console.log(`Updated ${data.status.length} ECU status dots`);
-            }
         }
     } catch (e) {
         console.error('Failed to poll ECU status:', e);
@@ -1158,8 +1094,7 @@ async function pollEcuStatus() {
 
 // Poll every 2 seconds
 if (AUTO_RUN_SESSION_ID) {
-    // Initial poll after a short delay to allow page to load
-    setTimeout(pollEcuStatus, 500);
+    pollEcuStatus();
     setInterval(pollEcuStatus, 2000);
 }
 </script>
@@ -1220,18 +1155,7 @@ if (AUTO_RUN_SESSION_ID) {
     return true;
   }
 
-  function setAutoRunUI({title, statusClass, statusText, percent, itemsHtml, closable}){
-    document.getElementById('autoRunTitle').textContent = title || "Running Pre-checks";
-    const st = document.getElementById('autoRunStatus');
-    st.className = `alert ${statusClass || 'flash-request'}`;
-    st.textContent = statusText || "";
-    document.getElementById('autoRunProgress').style.width = `${percent || 0}%`;
-    document.getElementById('autoRunPercent').textContent = String(percent || 0);
-    document.getElementById('autoRunList').innerHTML = itemsHtml || "";
-    document.getElementById('autoRunClose').disabled = !closable;
-  }
-
-  // ===================== SCAN FUNCTION =====================
+  // Unified scan: html5-qrcode preview first; fallback to backend scan (no preview).
   async function scanAndFillInput(targetInputId, scanKind="text"){
     const input = document.getElementById(targetInputId);
     if (!input) return;
@@ -1248,10 +1172,10 @@ if (AUTO_RUN_SESSION_ID) {
     noPreviewHint.style.display = "none";
     readerDiv.innerHTML = "";
 
-    // Try HTML5 QR scanner first (browser camera)
+    // Browser camera preview
     if (window.Html5Qrcode){
-      statusEl.className = "alert alert-info";
-      statusEl.innerHTML = '<i class="bi bi-camera"></i> Opening camera...';
+      statusEl.className = "alert flash-request";
+      statusEl.textContent = "Opening camera...";
       readerWrap.style.display = "block";
       modal.show();
 
@@ -1265,80 +1189,58 @@ if (AUTO_RUN_SESSION_ID) {
         readerDiv.innerHTML = "";
       }
 
-      cancelBtn.onclick = async () => { 
-        await cleanup(); 
-        modal.hide(); 
-      };
+      cancelBtn.onclick = async () => { await cleanup(); modal.hide(); };
 
       function onScanSuccess(decodedText){
         if (stopRequested) return;
-        
-        // Process the scanned text
-        let scanned = decodedText || "";
-        
-        // For VIN, clean up and validate
-        if (scanKind === "vin") {
-          scanned = scanned.toUpperCase().replace(/[^A-Z0-9]/g, "");
-          if (scanned.length > 17) scanned = scanned.substring(0, 17);
-        }
-        
-        input.value = scanned;
+        input.value = decodedText || "";
         input.dispatchEvent(new Event("input", {bubbles:true}));
         input.dispatchEvent(new Event("blur", {bubbles:true}));
-        
-        // Show success message briefly
-        statusEl.className = "alert alert-success";
-        statusEl.innerHTML = '<i class="bi bi-check-circle"></i> Scan successful!';
-        
-        setTimeout(() => {
-          cleanup().finally(() => modal.hide());
-        }, 500);
+        cleanup().finally(() => modal.hide());
       }
 
-      try {
+      try{
         const devices = await Html5Qrcode.getCameras();
         if (!devices || !devices.length) throw new Error("No camera devices found");
 
-        // Prefer back camera
         const backCam = devices.find(d => {
           const lbl = (d.label || "").toLowerCase();
           return lbl.includes("back") || lbl.includes("rear") || lbl.includes("environment");
         });
         const cameraId = (backCam ? backCam.id : devices[0].id);
 
-        statusEl.innerHTML = '<i class="bi bi-camera"></i> Point camera at QR/Barcode...';
+        statusEl.textContent = "Point camera at QR/Barcode...";
         await html5QrCode.start(
           cameraId,
-          { fps: 10, qrbox: 250 },
+          { fps: 12, qrbox: 240 },
           onScanSuccess,
           () => {}
         );
         return;
-      } catch (e) {
-        console.warn("HTML5 QR scanner failed:", e);
+      }catch(e){
+        console.warn("html5-qrcode failed; fallback to backend:", e);
         try { await cleanup(); } catch(_){}
         readerWrap.style.display = "none";
       }
     }
 
-    // Fallback to backend scanner
-    statusEl.className = "alert alert-info";
-    statusEl.innerHTML = '<i class="bi bi-printer"></i> Using station scanner...';
+    // Backend scan fallback
+    statusEl.className = "alert flash-request";
+    statusEl.textContent = "Starting station scanner (no live preview)...";
     noPreviewHint.style.display = "block";
     modal.show();
 
     let start;
-    try { 
-      start = await apiScanStart(scanKind, 25); 
-    } catch(e){
-      statusEl.className = "alert alert-danger";
-      statusEl.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Scan API unavailable';
+    try { start = await apiScanStart(scanKind, 25); }
+    catch(e){
+      statusEl.className = "alert flash-fail";
+      statusEl.textContent = "Scan API unavailable";
       return;
     }
 
     if (!start.ok){
-      statusEl.className = "alert alert-danger";
-      statusEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${start.error || "Failed to start scan"}`;
+      statusEl.className = "alert flash-fail";
+      statusEl.textContent = start.error || "Failed to start scan";
       return;
     }
 
@@ -1358,112 +1260,74 @@ if (AUTO_RUN_SESSION_ID) {
 
       if (st.status === "found"){
         clearInterval(timer);
-        
-        let scanned = st.value || "";
-        if (scanKind === "vin") {
-          scanned = scanned.toUpperCase().replace(/[^A-Z0-9]/g, "");
-          if (scanned.length > 17) scanned = scanned.substring(0, 17);
-        }
-        
-        input.value = scanned;
+        modal.hide();
+        input.value = st.value || "";
         input.dispatchEvent(new Event("input", {bubbles:true}));
         input.dispatchEvent(new Event("blur", {bubbles:true}));
-        
-        statusEl.className = "alert alert-success";
-        statusEl.innerHTML = '<i class="bi bi-check-circle"></i> Scan successful!';
-        
-        setTimeout(() => modal.hide(), 500);
         return;
       }
 
       if (["timeout","cancelled","error","busy"].includes(st.status)){
         clearInterval(timer);
-        statusEl.className = "alert alert-danger";
-        statusEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${st.error || `Scan ${st.status}`}`;
+        statusEl.className = "alert flash-fail";
+        statusEl.textContent = st.error || `Scan ${st.status}`;
       } else {
-        statusEl.className = "alert alert-info";
-        statusEl.innerHTML = '<i class="bi bi-qr-code-scan"></i> Scanning... (show code to station camera)';
+        statusEl.className = "alert flash-request";
+        statusEl.textContent = "Scanning... (show QR/Barcode to station camera)";
       }
     }, 250);
   }
 
-  // ===================== VIN MODAL FUNCTION =====================
+  function setAutoRunUI({title, statusClass, statusText, percent, itemsHtml, closable}){
+    document.getElementById('autoRunTitle').textContent = title || "Running Pre-checks";
+    const st = document.getElementById('autoRunStatus');
+    st.className = `alert ${statusClass || 'flash-request'}`;
+    st.textContent = statusText || "";
+    document.getElementById('autoRunProgress').style.width = `${percent || 0}%`;
+    document.getElementById('autoRunPercent').textContent = String(percent || 0);
+    document.getElementById('autoRunList').innerHTML = itemsHtml || "";
+    document.getElementById('autoRunClose').disabled = !closable;
+  }
+
   function openVinModal({onSubmit, onCancel}){
     const modalEl = document.getElementById("vinManualModal");
     const modal = new bootstrap.Modal(modalEl);
     const input = document.getElementById("vinManualInput");
     const err = document.getElementById("vinManualError");
-    const errorMessage = document.getElementById("vinErrorMessage");
     const btnSubmit = document.getElementById("vinManualSubmit");
     const btnCancel = document.getElementById("vinManualCancel");
     const btnScan = document.getElementById("vinScanBtn");
 
-    // Reset modal state
     err.style.display = "none";
-    errorMessage.textContent = "";
+    err.textContent = "";
     input.value = "";
-    input.classList.remove("is-invalid");
-    
-    // Auto-focus the input
-    setTimeout(() => input.focus(), 300);
 
-    // Set up scan button
-    btnScan.onclick = async () => {
-      btnScan.disabled = true;
-      btnScan.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Scanning...';
-      try {
-        await scanAndFillInput("vinManualInput", "vin");
-      } finally {
-        btnScan.disabled = false;
-        btnScan.innerHTML = '<i class="bi bi-qr-code-scan"></i> Scan';
-      }
-    };
-
-    // Input validation on keyup
-    input.onkeyup = () => {
-      const vin = input.value.toUpperCase();
-      input.value = vin; // Force uppercase
-      
-      if (vin.length === 17) {
-        if (/[IOQ]/.test(vin)) {
-          input.classList.add("is-invalid");
-        } else {
-          input.classList.remove("is-invalid");
-        }
-      } else {
-        input.classList.remove("is-invalid");
-      }
-    };
+    btnScan.onclick = () => scanAndFillInput("vinManualInput", "vin");
 
     btnSubmit.onclick = async () => {
       err.style.display = "none";
       const vin = (input.value || "").trim().toUpperCase();
 
-      // Validate VIN
       if (vin.length !== 17){
-        errorMessage.textContent = `VIN must be 17 characters (got ${vin.length})`;
         err.style.display = "block";
-        input.classList.add("is-invalid");
+        err.textContent = `VIN must be 17 characters (got ${vin.length})`;
         return;
       }
       if (/[IOQ]/.test(vin)){
-        errorMessage.textContent = "VIN contains invalid characters (I, O, Q are not allowed)";
         err.style.display = "block";
-        input.classList.add("is-invalid");
+        err.textContent = "VIN contains invalid characters (I, O, Q)";
         return;
       }
 
       btnSubmit.disabled = true;
-      btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
-      
       try{
         await onSubmit(vin);
         modal.hide();
       }catch(e){
-        errorMessage.textContent = e?.message || "Failed to submit VIN";
         err.style.display = "block";
+        err.textContent = e?.message || "Failed to submit VIN";
+      }finally{
         btnSubmit.disabled = false;
-        btnSubmit.innerHTML = 'Submit VIN';
       }
     };
 
@@ -1471,14 +1335,6 @@ if (AUTO_RUN_SESSION_ID) {
       modal.hide();
       if (onCancel) onCancel();
     };
-
-    // Clean up when modal is hidden
-    modalEl.addEventListener('hidden.bs.modal', function () {
-      btnSubmit.disabled = false;
-      btnSubmit.innerHTML = 'Submit VIN';
-      btnScan.disabled = false;
-      btnScan.innerHTML = '<i class="bi bi-qr-code-scan"></i> Scan';
-    }, { once: true });
 
     modal.show();
   }
@@ -1532,58 +1388,6 @@ if (AUTO_RUN_SESSION_ID) {
     
     const colorClass = isWithin ? 'text-success' : 'text-danger';
     return `<span class="${colorClass} fw-bold">${value}</span>`;
-  }
-
-  function renderList(state){
-    // Filter to only section-level programs (VIN and Battery Voltage)
-    const sectionPrograms = state.filter(p => p.source === 'section' || !p.source);
-    
-    let html = '<div class="mb-2"><strong>Section Pre-checks:</strong></div>';
-    
-    sectionPrograms.forEach(p => {
-      const req = p.required
-        ? `<span class="badge bg-secondary ms-1">Required</span>`
-        : `<span class="badge bg-light text-dark ms-1">Optional</span>`;
-
-      const badge = renderBadge(p.ui_status, p.passed === true);
-
-      const err = (p.exception && p.passed === false)
-        ? `<div class="text-danger small mt-1">${p.exception}</div>`
-        : ``;
-
-      let rv = '';
-      if (p.result_value && p.passed) {
-        if (p.display_type === 'value' && p.display_unit) {
-          const valueHtml = renderValueWithLimits(p.result_value, p.output_limits);
-          rv = `<div class="small text-muted mt-1">Value: ${valueHtml} ${p.display_unit}</div>`;
-        } else {
-          rv = `<div class="small text-muted mt-1">Value: <span class="font-monospace">${p.result_value}</span></div>`;
-        }
-      }
-
-      const isVin = (p.log_as_vin === true && p.fallback_action.toLowerCase() === "manual_input");
-      const manualBtn = isVin && p.ui_status !== 'COMPLETED' && p.passed !== true
-        ? `<button type="button"
-                   class="btn btn-sm btn-outline-primary js-manual-vin-btn mt-2"
-                   data-program-id="${p.program_id}">
-              <i class="bi bi-pencil-square"></i> Manual VIN
-           </button>`
-        : ``;
-
-      html += `
-        <div class="border rounded p-2 mb-2">
-          <div class="d-flex justify-content-between align-items-center gap-2">
-            <div><strong>${p.program_name}</strong> <span class="text-muted">(${p.program_id})</span></div>
-            <div>${badge}${req}</div>
-          </div>
-          ${rv}
-          ${err}
-          ${manualBtn}
-        </div>
-      `;
-    });
-    
-    return html;
   }
 
   async function runDiagnosticsPrechecksThenNavigate(href){
@@ -1664,7 +1468,6 @@ if (AUTO_RUN_SESSION_ID) {
       display_type: p.display_type || "text",
       display_unit: p.display_unit || null,
       output_limits: p.output_limits || [],
-      source: p.source || 'section',
       task_id: null,
       ui_status: "NOT_STARTED",
       passed: null,
@@ -1674,6 +1477,55 @@ if (AUTO_RUN_SESSION_ID) {
 
     const vinPrompted = new Set();
     let vinModalOpen = false;
+
+    function renderList(){
+      return `
+        <div class="mt-2">
+          ${state.map(p => {
+            const req = p.required
+              ? `<span class="badge bg-secondary ms-1">Required</span>`
+              : `<span class="badge bg-light text-dark ms-1">Optional</span>`;
+
+            const badge = renderBadge(p.ui_status, p.passed === true);
+
+            const err = (p.exception && p.passed === false)
+              ? `<div class="text-danger small mt-1">${p.exception}</div>`
+              : ``;
+
+            let rv = '';
+            if (p.result_value && p.passed) {
+              if (p.display_type === 'value' && p.display_unit) {
+                const valueHtml = renderValueWithLimits(p.result_value, p.output_limits);
+                rv = `<div class="small text-muted mt-1">Value: ${valueHtml} ${p.display_unit}</div>`;
+              } else {
+                rv = `<div class="small text-muted mt-1">Value: <span class="font-monospace">${p.result_value}</span></div>`;
+              }
+            }
+
+            const isVin = (p.log_as_vin === true && p.fallback_action.toLowerCase() === "manual_input");
+            const manualBtn = isVin
+              ? `<button type="button"
+                         class="btn btn-sm btn-outline-primary js-manual-vin-btn mt-2"
+                         data-program-id="${p.program_id}">
+                    Manual VIN
+                 </button>`
+              : ``;
+
+            return `
+              <div class="border rounded p-2 mb-2">
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                  <div><strong>${p.program_name}</strong> <span class="text-muted">(${p.program_id})</span></div>
+                  <div>${badge}${req}</div>
+                </div>
+                ${rv}
+                ${err}
+                ${manualBtn}
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
 
     // Manual VIN button handler
     document.getElementById("autoRunList").onclick = (ev) => {
@@ -1689,35 +1541,17 @@ if (AUTO_RUN_SESSION_ID) {
 
       openVinModal({
         onSubmit: async (vin) => {
-          console.log(`Manual VIN submitted: ${vin}`);
           const resp = await apiSubmitManualVin(sessionId, pid, vin);
           if (!resp.ok) throw new Error(resp.error || "VIN_SUBMIT_FAILED");
-          
           prog.passed = true;
           prog.result_value = vin;
           prog.exception = null;
-          prog.ui_status = "COMPLETED";
-          
-          try { 
-            localStorage.setItem(`nirix_last_vin_${"{{ model_name }}".toLowerCase()}`, vin); 
-          } catch(e){}
-          
-          setAutoRunUI({
-            title: "Diagnostics – Pre-checks",
-            statusClass: "flash-request",
-            statusText: "VIN received. Continuing...",
-            percent: Math.round((state.filter(p => !isStreamProgram(p) && p.passed === true).length / 
-                                Math.max(1, state.filter(p => !isStreamProgram(p)).length)) * 100),
-            itemsHtml: renderList(state),
-            closable: false
-          });
+          try { localStorage.setItem(`nirix_last_vin_${"{{ model_name }}".toLowerCase()}`, vin); } catch(e){}
         },
-        onCancel: () => {
-          vinModalOpen = false;
-        }
+        onCancel: () => {}
       });
 
-      setTimeout(() => { vinModalOpen = false; }, 1000);
+      setTimeout(() => { vinModalOpen = false; }, 700);
     };
 
     // Poll session status for real task state
@@ -1732,7 +1566,7 @@ if (AUTO_RUN_SESSION_ID) {
           statusClass: "flash-fail",
           statusText: "Failed to fetch auto-run status.",
           percent: 0,
-          itemsHtml: renderList(state),
+          itemsHtml: renderList(),
           closable: true
         });
         document.getElementById('autoRunClose').onclick = () => modal.hide();
@@ -1746,7 +1580,7 @@ if (AUTO_RUN_SESSION_ID) {
           statusClass: "flash-fail",
           statusText: st?.error || "Auto-run status failed",
           percent: 0,
-          itemsHtml: renderList(state),
+          itemsHtml: renderList(),
           closable: true
         });
         document.getElementById('autoRunClose').onclick = () => modal.hide();
@@ -1768,13 +1602,6 @@ if (AUTO_RUN_SESSION_ID) {
           p.passed = !!pr.passed;
           p.exception = pr.error_message || null;
           p.result_value = pr.result_value || null;
-          
-          // If this is a VIN program that was manually entered, ensure it shows as passed
-          if (p.log_as_vin && pr.manual_input === true && pr.result_value) {
-            p.passed = true;
-            p.result_value = pr.result_value;
-            p.ui_status = "COMPLETED";
-          }
         } else {
           if (isStreamProgram(p) && p.ui_status === "STREAMING"){
             p.passed = true; // stream started OK
@@ -1794,88 +1621,30 @@ if (AUTO_RUN_SESSION_ID) {
         statusClass: "flash-request",
         statusText: "Running pre-check programs...",
         percent,
-        itemsHtml: renderList(state),
+        itemsHtml: renderList(),
         closable: false
       });
 
       // Auto-open VIN modal if needed
-      if (st.vin_input_needed === true) {
+      if (st.vin_input_needed === true){
         const vinProg = state.find(p => p.log_as_vin && p.fallback_action.toLowerCase() === "manual_input");
-        if (vinProg && !vinPrompted.has(vinProg.program_id) && !vinModalOpen && vinProg.passed !== true){
+        if (vinProg && !vinPrompted.has(vinProg.program_id) && !vinModalOpen){
           vinPrompted.add(vinProg.program_id);
           vinModalOpen = true;
-          
-          console.log(`Opening VIN modal for program ${vinProg.program_id}`);
 
           openVinModal({
             onSubmit: async (vin) => {
-              console.log(`Manual VIN submitted: ${vin}`);
               const resp = await apiSubmitManualVin(sessionId, vinProg.program_id, vin);
               if (!resp.ok) throw new Error(resp.error || "VIN_SUBMIT_FAILED");
-              
               vinProg.passed = true;
               vinProg.result_value = vin;
               vinProg.exception = null;
-              vinProg.ui_status = "COMPLETED";
-              
-              try { 
-                localStorage.setItem(`nirix_last_vin_${"{{ model_name }}".toLowerCase()}`, vin); 
-              } catch(e){}
-              
-              setAutoRunUI({
-                title: "Diagnostics – Pre-checks",
-                statusClass: "flash-request",
-                statusText: "VIN received. Continuing...",
-                percent,
-                itemsHtml: renderList(state),
-                closable: false
-              });
+              try { localStorage.setItem(`nirix_last_vin_${"{{ model_name }}".toLowerCase()}`, vin); } catch(e){}
             },
-            onCancel: () => {
-              vinModalOpen = false;
-            }
+            onCancel: () => {}
           });
 
-          setTimeout(() => { vinModalOpen = false; }, 1000);
-          return;
-        }
-      }
-
-      // Check if any VIN program failed directly
-      for (const p of state) {
-        if (p.log_as_vin && p.fallback_action === "manual_input" && 
-            p.ui_status === "ERROR" && !vinPrompted.has(p.program_id) && !vinModalOpen) {
-          
-          console.log(`VIN program ${p.program_id} failed, triggering manual modal`);
-          vinPrompted.add(p.program_id);
-          vinModalOpen = true;
-          
-          openVinModal({
-            onSubmit: async (vin) => {
-              console.log(`Manual VIN submitted for failed program: ${vin}`);
-              const resp = await apiSubmitManualVin(sessionId, p.program_id, vin);
-              if (!resp.ok) throw new Error(resp.error || "VIN_SUBMIT_FAILED");
-              
-              p.passed = true;
-              p.result_value = vin;
-              p.exception = null;
-              p.ui_status = "COMPLETED";
-              
-              setAutoRunUI({
-                title: "Diagnostics – Pre-checks",
-                statusClass: "flash-request",
-                statusText: "VIN received. Continuing...",
-                percent,
-                itemsHtml: renderList(state),
-                closable: false
-              });
-            },
-            onCancel: () => {
-              vinModalOpen = false;
-            }
-          });
-          
-          setTimeout(() => { vinModalOpen = false; }, 1000);
+          setTimeout(() => { vinModalOpen = false; }, 700);
           return;
         }
       }
@@ -1888,7 +1657,7 @@ if (AUTO_RUN_SESSION_ID) {
           statusClass: "flash-fail",
           statusText: `Blocked by: ${st.blocking_programs.join(", ")}`,
           percent,
-          itemsHtml: renderList(state),
+          itemsHtml: renderList(),
           closable: true
         });
         document.getElementById('autoRunClose').onclick = () => modal.hide();
@@ -1902,7 +1671,7 @@ if (AUTO_RUN_SESSION_ID) {
           statusClass: "flash-success",
           statusText: "All required pre-checks passed. Entering Diagnostics...",
           percent: 100,
-          itemsHtml: renderList(state),
+          itemsHtml: renderList(),
           closable: false
         });
 
@@ -1943,16 +1712,17 @@ if (AUTO_RUN_SESSION_ID) {
 (function(){
   const AUTO_RUN_SESSION_ID = "{{ _auto_run_session_id }}";
   
-  // ECU-level auto-run is triggered by the backend when the page loads
-  // The ECU status dots are updated by the global ECU status polling script
-  console.log('ECU page loaded with session:', AUTO_RUN_SESSION_ID);
-  
-  // Show loading indicator for ECU status
+  async function apiRunEcuAutoRun() {
+    // ECU-level auto-run is triggered by the backend when the page loads
+    // We just need to poll for ECU status
+    if (AUTO_RUN_SESSION_ID) {
+      // ECU status will be polled by the global ECU status script
+      console.log('ECU page loaded with session:', AUTO_RUN_SESSION_ID);
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
-    const ecuDots = document.querySelectorAll('.js-ecu-status');
-    ecuDots.forEach(dot => {
-      dot.style.display = "inline-block";
-    });
+    apiRunEcuAutoRun();
   });
 })();
 </script>
@@ -1962,6 +1732,8 @@ if (AUTO_RUN_SESSION_ID) {
 {# TEST SEQUENCE PAGE SCRIPT (parameter selected)                          #}
 {# Full support for: LIVE, stream, WDI, IO toggle, routine, DTC, Flashing, IUPR #}
 {# Includes scan preview + backend fallback                                #}
+{# FIX-62: Added stream values polling and display                         #}
+{# FIX-63: Enhanced auto-run session handling with VIN display             #}
 {# ====================================================================== #}
 {% if model_name and parameter %}
 <script>
@@ -2100,8 +1872,8 @@ async function scanAndFillInput(targetInputId, scanKind="text"){
 
   // Browser camera preview first
   if (window.Html5Qrcode){
-    statusEl.className = "alert alert-info";
-    statusEl.innerHTML = '<i class="bi bi-camera"></i> Opening camera...';
+    statusEl.className = "alert flash-request";
+    statusEl.textContent = "Opening camera...";
     readerWrap.style.display = "block";
     modal.show();
 
@@ -2135,7 +1907,7 @@ async function scanAndFillInput(targetInputId, scanKind="text"){
       });
       const cameraId = (backCam ? backCam.id : devices[0].id);
 
-      statusEl.innerHTML = '<i class="bi bi-camera"></i> Point camera at QR/Barcode...';
+      statusEl.textContent = "Point camera at QR/Barcode...";
       await html5QrCode.start(cameraId, { fps: 12, qrbox: 240 }, onScanSuccess, () => {});
       return;
     } catch (e) {
@@ -2146,22 +1918,22 @@ async function scanAndFillInput(targetInputId, scanKind="text"){
   }
 
   // Backend scan fallback
-  statusEl.className = "alert alert-info";
-  statusEl.innerHTML = '<i class="bi bi-printer"></i> Using station scanner...';
+  statusEl.className = "alert flash-request";
+  statusEl.textContent = "Starting station scanner (no live preview)...";
   noPreviewHint.style.display = "block";
   modal.show();
 
   let start;
   try { start = await apiScanStart(scanKind, 25); }
   catch(e){
-    statusEl.className = "alert alert-danger";
-    statusEl.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Scan API unavailable';
+    statusEl.className = "alert flash-fail";
+    statusEl.textContent = "Scan API unavailable";
     return;
   }
 
   if (!start.ok){
-    statusEl.className = "alert alert-danger";
-    statusEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${start.error || "Failed to start scan"}`;
+    statusEl.className = "alert flash-fail";
+    statusEl.textContent = start.error || "Failed to start scan";
     return;
   }
 
@@ -2190,11 +1962,11 @@ async function scanAndFillInput(targetInputId, scanKind="text"){
 
     if (["timeout","cancelled","error","busy"].includes(st.status)){
       clearInterval(timer);
-      statusEl.className = "alert alert-danger";
-      statusEl.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${st.error || `Scan ${st.status}`}`;
+      statusEl.className = "alert flash-fail";
+      statusEl.textContent = st.error || `Scan ${st.status}`;
     } else {
-      statusEl.className = "alert alert-info";
-      statusEl.innerHTML = '<i class="bi bi-qr-code-scan"></i> Scanning... (show code to station camera)';
+      statusEl.className = "alert flash-request";
+      statusEl.textContent = "Scanning... (show QR/Barcode to station camera)";
     }
   }, 250);
 }
