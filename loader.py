@@ -5,16 +5,14 @@ Supports split auto-run programs:
 - section_tests.json: Contains VIN Read and Battery Voltage (runs on section entry)
 - ecu_tests.json: Contains ECU Active Check (runs on ECU page load)
 
-Version: 2.4.0
-Last Updated: 2026-02-19
+Version: 2.2.0
+Last Updated: 2026-02-17
 
-FIXES IN v2.4.0
+FIXES IN v2.2.0
 ────────────────
-- FIX-130: Added source tracking for auto-run programs (section vs ecu)
-- FIX-131: Enhanced ECU-level auto-run program loading
-- FIX-132: Improved schema validation leniency for auto_run_programs
-- FIX-133: Added database column existence checks
-- FIX-134: Better error recovery during sync operations
+- FIX-45: Added support for ECU-specific auto_run_programs in ecu_tests.json
+- FIX-46: Enhanced ECU status persistence for colored dots in UI
+- FIX-47: Proper separation of section-level and ECU-level auto-run programs
 """
 
 from __future__ import annotations
@@ -176,7 +174,7 @@ def list_all_vehicles() -> List[str]:
 
 
 # =============================================================================
-# FIX-132: LENIENT SCHEMA LOADING & VALIDATION
+# SCHEMA LOADING & VALIDATION
 # =============================================================================
 
 _SCHEMA_CACHE: Dict[str, Dict] = {}
@@ -208,12 +206,7 @@ def validate_json(
     schema_path: str,
     strict: bool = False,
 ) -> Tuple[bool, List[str]]:
-    """
-    Validate a JSON payload against a schema with lenient handling.
-    
-    FIX-132: Ignores additionalProperties errors for auto_run_programs
-    to maintain backward compatibility.
-    """
+    """Validate a JSON payload against a schema."""
     if Draft202012Validator is None:
         _log("jsonschema not installed, skipping validation", "WARN")
         return True, []
@@ -226,23 +219,7 @@ def validate_json(
     if validator is None:
         return True, []
 
-    # Use a more lenient validation approach - filter out expected warnings
-    errors = []
-    for error in validator.iter_errors(payload):
-        error_str = str(error)
-        
-        # FIX-132: Ignore additionalProperties errors for auto_run_programs
-        if "auto_run_programs" in error_str and "Additional properties" in error_str:
-            _log(f"Ignoring schema warning: {error.message}", "DEBUG")
-            continue
-        
-        # Also ignore if the error is about auto_run_programs in other contexts
-        if "auto_run_programs" in error_str and "was unexpected" in error_str:
-            _log(f"Ignoring auto_run_programs schema warning: {error.message}", "DEBUG")
-            continue
-            
-        errors.append(error)
-
+    errors = list(validator.iter_errors(payload))
     if not errors:
         return True, []
 
@@ -508,7 +485,7 @@ def get_ecu_details(
             "icon": ecu.get("icon", ""),
             "is_active": ecu.get("is_active", True),
             "sort_order": ecu.get("sort_order", 0),
-            # FIX-131: Include ECU-specific auto-run programs
+            # FIX-45: Include ECU-specific auto-run programs
             "auto_run_programs": ecu.get("auto_run_programs", []),
             "parameters": ecu.get("parameters", []),
         })
@@ -536,29 +513,17 @@ def get_parameter_details(vehicle: str, ecu_code: str) -> List[Dict[str, Any]]:
     ]
 
 
-# =============================================================================
-# FIX-131: GET ECU-SPECIFIC AUTO-RUN PROGRAMS
-# =============================================================================
-
 def get_ecu_auto_run_programs(vehicle: str, ecu_code: str) -> List[Dict[str, Any]]:
     """
-    Get ECU-specific auto-run programs from ecu_tests.json.
+    FIX-45: Get ECU-specific auto-run programs from ecu_tests.json.
     These run when the ECU page loads.
-    
-    FIX-131: Also adds source='ecu' to each program for tracking.
     """
     ecus = get_ecu_details(vehicle, ecu_code)
     if not ecus:
         return []
     
     ecu = ecus[0]
-    programs = ecu.get("auto_run_programs", [])
-    
-    # FIX-130: Add source field to each program
-    for prog in programs:
-        prog["source"] = "ecu"
-    
-    return programs
+    return ecu.get("auto_run_programs", [])
 
 
 # =============================================================================
@@ -1009,25 +974,8 @@ def _to_jsonb_or_empty_array(value: Any) -> str:
 
 
 # =============================================================================
-# FIX-133: DATABASE COLUMN CHECK
+# DATABASE INDEX CREATION
 # =============================================================================
-
-def _has_column(table: str, column: str) -> bool:
-    """Check if a column exists in a table."""
-    if execute is None:
-        return False
-    try:
-        result = query_one("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_schema = 'app' 
-            AND table_name = :table 
-            AND column_name = :column
-        """, {"table": table, "column": column})
-        return result is not None
-    except Exception:
-        return False
-
 
 def _ensure_indexes():
     """Create necessary indexes for performance if they don't exist."""
@@ -1069,19 +1017,13 @@ def _ensure_indexes():
             ON app.diagnostic_folders(ecu_code)
         """)
         
-        # Indexes for vehicle diagnostic actions
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_vehicle_diagnostic_actions_vehicle_ecu 
-            ON app.vehicle_diagnostic_actions(vehicle_id, ecu_code)
-        """)
-        
         _log("Database indexes ensured", "INFO")
     except Exception as e:
         _log(f"Failed to create indexes: {e}", "WARN")
 
 
 # =============================================================================
-# FIX-130 & FIX-134: DATABASE SYNC — MAIN ENTRY POINT
+# DATABASE SYNC — MAIN ENTRY POINT
 # =============================================================================
 
 def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
@@ -1100,12 +1042,6 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
     # Ensure indexes exist before syncing
     _ensure_indexes()
 
-    # FIX-133: Check if auto_run_programs column exists
-    has_auto_run_column = _has_column("vehicle_diagnostic_actions", "auto_run_programs")
-    if not has_auto_run_column:
-        _log("WARNING: auto_run_programs column missing in vehicle_diagnostic_actions", "WARN")
-        _log("ECU-specific auto-run programs will not be stored in database", "WARN")
-
     stats: Dict[str, int] = {
         "vehicles_processed": 0,
         "vehicles_skipped": 0,
@@ -1113,7 +1049,7 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
         "sections_updated": 0,
         "ecus_created": 0,
         "ecus_updated": 0,
-        "ecu_auto_run_programs_synced": 0,
+        "ecu_auto_run_programs_synced": 0,  # FIX-45: Track ECU auto-run programs
         "parameters_created": 0,
         "parameters_updated": 0,
         "health_tabs_created": 0,
@@ -1177,7 +1113,7 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
             try:
                 ecu_data = load_ecu_tests(vehicle_name)
                 if ecu_data:
-                    _sync_ecus_to_db(vehicle_id, ecu_data, stats, has_auto_run_column)
+                    _sync_ecus_to_db(vehicle_id, ecu_data, stats)
                     register_definition_version(
                         vehicle_id, ecu_data, "filesystem"
                     )
@@ -1338,8 +1274,6 @@ def _sync_auto_run_programs_to_db(
 ):
     """
     Sync auto-run program config to vehicle_section_map as jsonb.
-    
-    FIX-130: Programs synced here are section-level (source will be added at runtime)
     """
     normalized = []
 
@@ -1372,7 +1306,6 @@ def _sync_auto_run_programs_to_db(
             "is_required": prog.get("is_required", True),
             "timeout_sec": prog.get("timeout_sec", 15),
             "sort_order": prog.get("sort_order", 0),
-            # Note: source is not stored in DB, added at runtime by service
         }
 
         normalized.append(norm)
@@ -1506,15 +1439,10 @@ def _sync_health_tabs_to_db(
 
 
 # =============================================================================
-# FIX-131 & FIX-133: DATABASE SYNC — ECUS AND PARAMETERS WITH AUTO-RUN
+# DATABASE SYNC — ECUS AND PARAMETERS
 # =============================================================================
 
-def _sync_ecus_to_db(
-    vehicle_id: int, 
-    data: Dict, 
-    stats: Dict,
-    has_auto_run_column: bool = False
-):
+def _sync_ecus_to_db(vehicle_id: int, data: Dict, stats: Dict):
     """Sync ECUs and parameters from ecu_tests.json to database."""
     ecus_list = data.get("ecus", [])
     if not ecus_list:
@@ -1560,7 +1488,7 @@ def _sync_ecus_to_db(
 
         _log(f"  Processing ECU: {ecu_code}")
 
-        # Get ECU-specific auto-run programs
+        # Get ECU-specific auto-run programs (FIX-45)
         ecu_auto_run = ecu.get("auto_run_programs", [])
 
         # Upsert diagnostic_folders (global ECU definition)
@@ -1619,110 +1547,58 @@ def _sync_ecus_to_db(
             global_folder_id = row["id"]
             stats["ecus_created"] += 1
 
-        # Check if vehicle_diagnostic_actions record exists
+        # Upsert vehicle_diagnostic_actions (vehicle-specific ECU entry)
         vehicle_ecu = query_one("""
             SELECT id FROM app.vehicle_diagnostic_actions
             WHERE vehicle_id = :vid AND ecu_code = :code
         """, {"vid": vehicle_id, "code": ecu_code})
 
         if vehicle_ecu:
-            # Update existing record
-            if has_auto_run_column:
-                # Include auto_run_programs in update
-                execute("""
-                    UPDATE app.vehicle_diagnostic_actions SET
-                        ecu_name    = :name,
-                        description = :desc,
-                        protocol    = :proto,
-                        emission    = :emission,
-                        is_active   = :active,
-                        sort_order  = :sort,
-                        auto_run_programs = :auto_run
-                    WHERE id = :id
-                """, {
-                    "id": vehicle_ecu["id"],
-                    "name": ecu.get("ecu_name", ""),
-                    "desc": ecu.get("description"),
-                    "proto": ecu.get("protocol"),
-                    "emission": ecu.get("emission"),
-                    "active": ecu.get("is_active", True),
-                    "sort": ecu.get("sort_order", 0),
-                    "auto_run": _to_jsonb(ecu_auto_run) if ecu_auto_run else None,
-                })
-            else:
-                # Update without auto_run_programs
-                execute("""
-                    UPDATE app.vehicle_diagnostic_actions SET
-                        ecu_name    = :name,
-                        description = :desc,
-                        protocol    = :proto,
-                        emission    = :emission,
-                        is_active   = :active,
-                        sort_order  = :sort
-                    WHERE id = :id
-                """, {
-                    "id": vehicle_ecu["id"],
-                    "name": ecu.get("ecu_name", ""),
-                    "desc": ecu.get("description"),
-                    "proto": ecu.get("protocol"),
-                    "emission": ecu.get("emission"),
-                    "active": ecu.get("is_active", True),
-                    "sort": ecu.get("sort_order", 0),
-                })
-            
-            if ecu_auto_run:
-                stats["ecu_auto_run_programs_synced"] += 1
+            execute("""
+                UPDATE app.vehicle_diagnostic_actions SET
+                    ecu_name    = :name,
+                    description = :desc,
+                    protocol    = :proto,
+                    emission    = :emission,
+                    is_active   = :active,
+                    sort_order  = :sort,
+                    auto_run_programs = :auto_run  -- FIX-45: Store ECU auto-run programs
+                WHERE id = :id
+            """, {
+                "id": vehicle_ecu["id"],
+                "name": ecu.get("ecu_name", ""),
+                "desc": ecu.get("description"),
+                "proto": ecu.get("protocol"),
+                "emission": ecu.get("emission"),
+                "active": ecu.get("is_active", True),
+                "sort": ecu.get("sort_order", 0),
+                "auto_run": _to_jsonb(ecu_auto_run) if ecu_auto_run else None,
+            })
+            stats["ecu_auto_run_programs_synced"] += 1 if ecu_auto_run else 0
         else:
-            # Insert new record
-            if has_auto_run_column:
-                # Include auto_run_programs in insert
-                execute("""
-                    INSERT INTO app.vehicle_diagnostic_actions
-                    (vehicle_id, diagnostic_section_id, folder_id,
-                     ecu_code, ecu_name, description, protocol,
-                     emission, is_active, sort_order, auto_run_programs)
-                    VALUES
-                    (:vid, :dsid, :fid,
-                     :code, :name, :desc, :proto,
-                     :emission, :active, :sort, :auto_run)
-                """, {
-                    "vid": vehicle_id,
-                    "dsid": diag_section_id,
-                    "fid": global_folder_id,
-                    "code": ecu_code,
-                    "name": ecu.get("ecu_name", ""),
-                    "desc": ecu.get("description"),
-                    "proto": ecu.get("protocol"),
-                    "emission": ecu.get("emission"),
-                    "active": ecu.get("is_active", True),
-                    "sort": ecu.get("sort_order", 0),
-                    "auto_run": _to_jsonb(ecu_auto_run) if ecu_auto_run else None,
-                })
-            else:
-                # Insert without auto_run_programs
-                execute("""
-                    INSERT INTO app.vehicle_diagnostic_actions
-                    (vehicle_id, diagnostic_section_id, folder_id,
-                     ecu_code, ecu_name, description, protocol,
-                     emission, is_active, sort_order)
-                    VALUES
-                    (:vid, :dsid, :fid,
-                     :code, :name, :desc, :proto,
-                     :emission, :active, :sort)
-                """, {
-                    "vid": vehicle_id,
-                    "dsid": diag_section_id,
-                    "fid": global_folder_id,
-                    "code": ecu_code,
-                    "name": ecu.get("ecu_name", ""),
-                    "desc": ecu.get("description"),
-                    "proto": ecu.get("protocol"),
-                    "emission": ecu.get("emission"),
-                    "active": ecu.get("is_active", True),
-                    "sort": ecu.get("sort_order", 0),
-                })
-            
-            if ecu_auto_run and has_auto_run_column:
+            execute("""
+                INSERT INTO app.vehicle_diagnostic_actions
+                (vehicle_id, diagnostic_section_id, folder_id,
+                 ecu_code, ecu_name, description, protocol,
+                 emission, is_active, sort_order, auto_run_programs)
+                VALUES
+                (:vid, :dsid, :fid,
+                 :code, :name, :desc, :proto,
+                 :emission, :active, :sort, :auto_run)
+            """, {
+                "vid": vehicle_id,
+                "dsid": diag_section_id,
+                "fid": global_folder_id,
+                "code": ecu_code,
+                "name": ecu.get("ecu_name", ""),
+                "desc": ecu.get("description"),
+                "proto": ecu.get("protocol"),
+                "emission": ecu.get("emission"),
+                "active": ecu.get("is_active", True),
+                "sort": ecu.get("sort_order", 0),
+                "auto_run": _to_jsonb(ecu_auto_run) if ecu_auto_run else None,
+            })
+            if ecu_auto_run:
                 stats["ecu_auto_run_programs_synced"] += 1
 
         # Sync parameters
@@ -2085,7 +1961,7 @@ def _sync_test_flashing_config(
 
 
 # =============================================================================
-# FIX-130: AUTO-RUN PROGRAM RETRIEVAL WITH SOURCE
+# AUTO-RUN PROGRAM RETRIEVAL
 # =============================================================================
 
 def get_auto_run_config(
@@ -2134,7 +2010,6 @@ def get_auto_run_config(
                         if isinstance(programs, str):
                             programs = json.loads(programs)
                         if programs:
-                            # Source will be added at runtime by service
                             return programs
 
         except Exception as e:
@@ -2149,11 +2024,11 @@ def get_ecu_auto_run_config(
     ecu_code: str,
 ) -> List[Dict[str, Any]]:
     """
-    FIX-131: Get ECU-specific auto-run program configuration.
+    FIX-45: Get ECU-specific auto-run program configuration.
     These run when the ECU page loads (e.g., ECU Active Check).
     """
-    # Try database first if column exists
-    if query_one is not None and _has_column("vehicle_diagnostic_actions", "auto_run_programs"):
+    # Try database first
+    if query_one is not None:
         try:
             db_vehicle = query_one("""
                 SELECT v.id
@@ -2177,7 +2052,6 @@ def get_ecu_auto_run_config(
                     if isinstance(programs, str):
                         programs = json.loads(programs)
                     if programs:
-                        # Source will be added at runtime by service
                         return programs
 
         except Exception as e:
@@ -2326,9 +2200,6 @@ def reload_vehicle_tests(
 
     vehicle_id = db_vehicle["id"]
 
-    # Check if auto_run_programs column exists
-    has_auto_run_column = _has_column("vehicle_diagnostic_actions", "auto_run_programs")
-
     stats: Dict[str, int] = {
         "sections_created": 0,
         "sections_updated": 0,
@@ -2363,7 +2234,7 @@ def reload_vehicle_tests(
         try:
             ecu_data = load_ecu_tests(vehicle)
             if ecu_data:
-                _sync_ecus_to_db(vehicle_id, ecu_data, stats, has_auto_run_column)
+                _sync_ecus_to_db(vehicle_id, ecu_data, stats)
                 register_definition_version(
                     vehicle_id, ecu_data, "filesystem"
                 )
@@ -2421,8 +2292,6 @@ def get_auto_run_programs(
     """
     Extract auto-run program specs from section_tests.json.
     Fallback used by get_auto_run_config when DB unavailable.
-    
-    FIX-130: Source is not set here - will be added at runtime by service.
     """
     try:
         data = load_section_tests(vehicle)
@@ -2471,7 +2340,6 @@ def get_auto_run_programs(
                 "is_required": p.get("is_required", True),
                 "timeout_sec": p.get("timeout_sec", 15),
                 "sort_order": p.get("sort_order", 0),
-                # Source will be added by service at runtime
             })
 
         return normalized
@@ -2521,7 +2389,7 @@ __all__ = [
     "get_parameters_from_json",
     "get_auto_run_programs",
     "get_auto_run_config",
-    "get_ecu_auto_run_config",  # Get ECU-specific auto-run programs
+    "get_ecu_auto_run_config",  # NEW: Get ECU-specific auto-run programs
     "get_tests_for_parameter",
 
     # Discovery
