@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.1.0",
   "vehicle": "TVS iQube ST",
   "section": "diagnostics",
   "ecu": "BMS",
@@ -7,35 +7,123 @@
   "tests": [
     {
       "id": "TVS_iQube_ST_BMS_LP_Voltage_STREAM",
-      "label": "Battery Voltage",
-      "description": "Measure Battery Voltage and validate limit",
-      "module_name": "Battery_Voltage",
+      "label": "Battery Pack Voltage",
+      "description": "Measure total battery pack voltage with limit validation",
+      "module_name": "battery_voltage",
       "function_name": "Battery_Voltage",
       "parameter_page_type": "LIVE_PARAMETER",
-      "button_name": "Apply",
+      "button_name": "Start Monitor",
+      "sort_order": 1,
+      "version": "2.0",
+      "is_active": true,
+      "tags": ["battery", "voltage", "stream"],
+      "dependencies": [],
+      "output_limits": [
+        { 
+          "signal": "voltage", 
+          "lsl": 10.0, 
+          "usl": 13.6, 
+          "unit": "V" 
+        }
+      ],
+      "execution": { 
+        "mode": "stream", 
+        "supports_run_all": true, 
+        "timeout_sec": 0,
+        "max_retries": 1,
+        "retry_delay_sec": 0.5,
+        "retry_on_timeout": false,
+        "retry_on_exception": false,
+        "requires_confirmation": false,
+        "requires_hardware": true
+      }
+    },
+    {
+      "id": "TVS_iQube_ST_BMS_LP_Current_STREAM",
+      "label": "Battery Current",
+      "description": "Monitor battery charge/discharge current",
+      "module_name": "battery_current",
+      "function_name": "Battery_Current",
+      "parameter_page_type": "LIVE_PARAMETER",
+      "button_name": "Monitor",
       "sort_order": 2,
       "version": "1.0",
       "is_active": true,
+      "tags": ["battery", "current", "stream"],
+      "dependencies": [],
       "output_limits": [
-        { "signal": "voltage", "lsl": 10, "usl": 15, "unit": "V" }
+        { 
+          "signal": "current", 
+          "lsl": -200, 
+          "usl": 200, 
+          "unit": "A" 
+        }
       ],
-      "execution": { "mode": "stream", "supports_run_all": true, "timeout_sec": 15 }
+      "execution": { 
+        "mode": "stream", 
+        "supports_run_all": true, 
+        "timeout_sec": 0,
+        "max_retries": 1,
+        "retry_delay_sec": 0.5,
+        "requires_hardware": true
+      }
     },
     {
-      "id": "TVS_iQube_ST_BMS_LP_Photosensor_STREAM",
-      "label": "Photosensor",
-      "description": "Read Photosensor Value",
-      "module_name": "Read_Photosensor",
-      "function_name": "Read_Photosensor",
+      "id": "TVS_iQube_ST_BMS_LP_SoC_STREAM",
+      "label": "State of Charge",
+      "description": "Battery percentage remaining",
+      "module_name": "battery_soc",
+      "function_name": "Battery_SoC",
       "parameter_page_type": "LIVE_PARAMETER",
-      "button_name": "Read",
-      "sort_order": 1,
+      "button_name": "Read SoC",
+      "sort_order": 3,
       "version": "1.0",
       "is_active": true,
+      "tags": ["battery", "soc", "stream"],
+      "dependencies": [],
       "output_limits": [
-        { "signal": "Light Focus", "lsl": 80, "usl": 200, "unit": "%"}
+        { 
+          "signal": "soc", 
+          "lsl": 0, 
+          "usl": 100, 
+          "unit": "%" 
+        }
       ],
-      "execution": { "mode": "stream", "supports_run_all": true, "timeout_sec": 15 }
+      "execution": { 
+        "mode": "stream", 
+        "supports_run_all": true, 
+        "timeout_sec": 0,
+        "max_retries": 1,
+        "requires_hardware": true
+      }
+    },
+    {
+      "id": "TVS_iQube_ST_BMS_LP_Temperature_STREAM",
+      "label": "Battery Temperature",
+      "description": "Average battery pack temperature",
+      "module_name": "battery_temp",
+      "function_name": "Battery_Temperature",
+      "parameter_page_type": "LIVE_PARAMETER",
+      "button_name": "Monitor",
+      "sort_order": 4,
+      "version": "1.0",
+      "is_active": true,
+      "tags": ["battery", "temperature", "stream"],
+      "dependencies": [],
+      "output_limits": [
+        { 
+          "signal": "temperature", 
+          "lsl": 0, 
+          "usl": 60, 
+          "unit": "°C" 
+        }
+      ],
+      "execution": { 
+        "mode": "stream", 
+        "supports_run_all": true, 
+        "timeout_sec": 0,
+        "requires_hardware": true
+      }
     }
   ]
 }
