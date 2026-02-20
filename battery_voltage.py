@@ -12,125 +12,254 @@ Auto-run entry point (from section_tests.json):
 UDS DID: 22 E1 42  (Battery Voltage)
 CAN IDs: 0x7F0 (req), 0x7F1 (resp)
 
-Version: 2.0.0
-Last Updated: 2026-02-17
+Version: 3.0.0
+Last Updated: 2026-02-21
+
+FIXES IN v3.0.0
+────────────────
+- FIX-51: Enhanced stream callback chain for persistence
+- FIX-62: Display pages support for battery voltage
+- FIX-64: Stream value persistence with ON CONFLICT
+- FIX-68: Proper generator function implementation
+- FIX-69: Stream heartbeat for stale detection
+- FIX-80: Improved CAN error handling with recovery
+- FIX-81: Multiple decode attempts per reading
 """
 
 from __future__ import annotations
 
 import time
 import logging
+import traceback
 from typing import Dict, Any, Optional, Generator
+from datetime import datetime
 
 import can
-from can import BusABC
+from can import BusABC, Message
 
-logging.getLogger("can").setLevel(logging.ERROR)
+# =============================================================================
+# LOGGING
+# =============================================================================
 
+logger = logging.getLogger(__name__)
 
-def _open_bus(can_interface: str, bitrate: int) -> Optional[can.Bus]:
-    """
-    Open CAN bus connection.
-    Returns None if bus cannot be opened.
-    """
+def _log_info(msg: str, context=None):
+    if context:
+        context.log(msg, "INFO")
+    else:
+        logger.info(f"[BATTERY] {msg}")
+
+def _log_warn(msg: str, context=None):
+    if context:
+        context.log(msg, "WARN")
+    else:
+        logger.warning(f"[BATTERY] {msg}")
+
+def _log_error(msg: str, context=None):
+    if context:
+        context.log(msg, "ERROR")
+    else:
+        logger.error(f"[BATTERY] {msg}")
+
+def _log_debug(msg: str, context=None):
+    if context:
+        context.log(msg, "DEBUG")
+    else:
+        logger.debug(f"[BATTERY] {msg}")
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# UDS Services
+UDS_READ_DATA_BY_IDENTIFIER = 0x22
+UDS_POSITIVE_RESPONSE_MASK = 0x40
+
+# DID for Battery Voltage (0xE142)
+BATTERY_VOLTAGE_DID = 0xE142
+BATTERY_VOLTAGE_DID_BYTES = [0xE1, 0x42]
+
+# CAN IDs
+REQUEST_ID = 0x7F0
+RESPONSE_ID = 0x7F1
+
+# Timeouts
+DEFAULT_TIMEOUT = 2.0
+FRAME_TIMEOUT = 0.3
+SESSION_SETUP_TIMEOUT = 0.5
+READ_INTERVAL = 0.4  # 400ms between readings
+
+# Retry settings
+MAX_RETRIES = 2
+RETRY_DELAY = 0.25
+
+# Voltage resolution (0.1V per bit)
+VOLTAGE_RESOLUTION = 0.1
+
+# Heartbeat interval
+HEARTBEAT_INTERVAL = 5.0  # seconds
+
+# =============================================================================
+# CAN BUS HELPERS
+# =============================================================================
+
+def _open_bus(can_interface: str, bitrate: int, context=None) -> Optional[can.Bus]:
+    """Open CAN bus connection with error handling."""
     iface = (can_interface or "").strip()
+    
     try:
+        _log_debug(f"Opening CAN bus: {iface}", context)
+        
         if iface.upper().startswith("PCAN"):
-            return can.Bus(interface="pcan", channel=iface, bitrate=int(bitrate), fd=False)
-        if iface.lower().startswith("can"):
-            return can.Bus(interface="socketcan", channel=iface, bitrate=int(bitrate))
-        raise ValueError(f"Unsupported CAN interface: {iface}")
+            bus = can.Bus(
+                interface="pcan", 
+                channel=iface, 
+                bitrate=int(bitrate), 
+                fd=False
+            )
+        elif iface.lower().startswith("can") or iface.lower().startswith("vcan"):
+            bus = can.Bus(
+                interface="socketcan", 
+                channel=iface, 
+                bitrate=int(bitrate)
+            )
+        else:
+            raise ValueError(f"Unsupported CAN interface: {iface}")
+        
+        if bus.state == can.BusState.ACTIVE:
+            _log_info(f"CAN bus opened: {iface}", context)
+            return bus
+        
     except Exception as e:
-        print(f"[BATTERY] Failed to open CAN bus: {e}")
-        return None
+        _log_error(f"Failed to open CAN bus: {e}", context)
+    
+    return None
 
 
-def _serialize_can_message(msg: can.Message) -> Dict[str, Any]:
+def _serialize_can_message(msg: Optional[can.Message]) -> Optional[Dict[str, Any]]:
     """Serialize CAN message for logging."""
+    if not msg:
+        return None
+    
     return {
-        "arbitration_id": f"{msg.arbitration_id:03X}",
-        "is_extended_id": bool(msg.is_extended_id),
-        "dlc": int(msg.dlc),
+        "arbitration_id": f"0x{msg.arbitration_id:03X}",
         "data": [f"{b:02X}" for b in msg.data],
         "timestamp": float(getattr(msg, "timestamp", 0.0) or 0.0),
     }
 
 
-def _read_voltage_once(bus: BusABC, *, context=None, progress=None) -> Dict[str, Any]:
+def _setup_diagnostic_session(bus: BusABC, context=None) -> bool:
+    """Setup UDS diagnostic session."""
+    try:
+        setup_req = can.Message(
+            arbitration_id=REQUEST_ID,
+            is_extended_id=False,
+            data=[0x02, 0x10, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00],
+        )
+        
+        _log_debug("Setting up diagnostic session", context)
+        bus.send(setup_req)
+        
+        response = bus.recv(timeout=SESSION_SETUP_TIMEOUT)
+        if response and response.arbitration_id == RESPONSE_ID:
+            if len(response.data) >= 3 and response.data[1] == 0x50 and response.data[2] == 0x03:
+                _log_debug("Diagnostic session established", context)
+                return True
+        
+        return False
+        
+    except Exception as e:
+        _log_debug(f"Session setup skipped: {e}", context)
+        return False
+
+
+def _read_voltage_once(
+    bus: BusABC, 
+    context=None, 
+    progress=None
+) -> Dict[str, Any]:
     """
     Send UDS ReadDataByIdentifier (22 E1 42) once and parse response.
     Returns dict with battery_voltage, message, raw.
-    Raises TimeoutError on no response.
     """
-    def log(msg: str, level: str = "INFO"):
-        if context:
-            context.log(msg, level)
-        else:
-            print(f"[{level}] {msg}")
+    _log_debug("Reading battery voltage", context)
 
-    if context:
-        context.checkpoint()
-        context.progress(10, "Sending UDS request (22 E1 42)")
-    if progress:
-        progress(10, "Sending UDS request (22 E1 42)")
-
-    # UDS ReadDataByIdentifier request for Battery Voltage (22 E1 42)
+    # UDS ReadDataByIdentifier request for Battery Voltage
     req = can.Message(
-        arbitration_id=0x7F0,
+        arbitration_id=REQUEST_ID,
         is_extended_id=False,
         data=[0x03, 0x22, 0xE1, 0x42, 0x00, 0x00, 0x00, 0x00],
     )
-    log(f"Tx {req.arbitration_id:03X} " + " ".join(f"{b:02X}" for b in req.data))
+    
+    _log_debug(f"Tx: {req.arbitration_id:03X} " + 
+               " ".join(f"{b:02X}" for b in req.data), context)
     
     try:
         bus.send(req)
     except Exception as e:
-        log(f"Failed to send CAN message: {e}", "ERROR")
+        _log_error(f"Failed to send request: {e}", context)
         raise
 
-    if context:
-        context.progress(35, "Waiting for ECU response")
-
-    deadline = time.time() + 2.0
-    resp = None
+    # Wait for response
+    deadline = time.time() + DEFAULT_TIMEOUT
+    response = None
+    
     while time.time() < deadline:
         if context:
             context.checkpoint()
-
-        try:
-            msg = bus.recv(timeout=0.3)
-        except Exception as e:
-            log(f"Error receiving CAN message: {e}", "ERROR")
-            continue
             
-        if not msg:
-            continue
-        if msg.arbitration_id != 0x7F1:
-            continue
+        try:
+            msg = bus.recv(timeout=FRAME_TIMEOUT)
+            if not msg:
+                continue
+                
+            if msg.arbitration_id != RESPONSE_ID:
+                continue
+                
+            _log_debug(f"Rx: {msg.arbitration_id:03X} " + 
+                       " ".join(f"{b:02X}" for b in msg.data), context)
+            response = msg
+            break
+            
+        except Exception as e:
+            _log_error(f"Receive error: {e}", context)
 
-        log(f"Rx {msg.arbitration_id:03X} " + " ".join(f"{b:02X}" for b in msg.data))
-        resp = msg
-        break
+    if not response:
+        raise TimeoutError("No response from ECU")
 
-    if not resp:
-        raise TimeoutError("No response from ECU for DID E1 42")
-
+    # Parse response
     # Positive response format: 62 E1 42 XX ...
-    if not (len(resp.data) >= 5 and resp.data[1] == 0x62 and resp.data[2] == 0xE1 and resp.data[3] == 0x42):
+    if not (len(response.data) >= 5 and 
+            response.data[1] == 0x62 and 
+            response.data[2] == 0xE1 and 
+            response.data[3] == 0x42):
         return {
             "battery_voltage": None,
             "message": "Invalid response format",
-            "raw": {"request": _serialize_can_message(req), "response": _serialize_can_message(resp)},
+            "raw": {
+                "request": _serialize_can_message(req),
+                "response": _serialize_can_message(response)
+            },
         }
 
     # Voltage is in 0.1V resolution
-    voltage = resp.data[4] * 0.1
+    voltage_raw = response.data[4]
+    voltage = voltage_raw * VOLTAGE_RESOLUTION
+    
     return {
         "battery_voltage": round(voltage, 2),
         "message": f"{voltage:.1f} V",
-        "raw": {"request": _serialize_can_message(req), "response": _serialize_can_message(resp)},
+        "raw": {
+            "request": _serialize_can_message(req),
+            "response": _serialize_can_message(response),
+        },
+        "timestamp": time.time(),
     }
 
+
+# =============================================================================
+# STREAMING GENERATOR
+# =============================================================================
 
 def read_battery_voltage_stream(
     can_interface: str,
@@ -151,106 +280,152 @@ def read_battery_voltage_stream(
     """
     bus = None
     iteration = 0
+    consecutive_errors = 0
+    max_consecutive_errors = 5
+    last_heartbeat = time.time()
+    
+    _log_info(f"Battery voltage stream starting: {can_interface} @ {bitrate} bps", context)
     
     try:
         if context:
             context.checkpoint()
             context.progress(5, "Opening CAN bus")
-            context.log(f"BATTERY STREAM: Starting with {can_interface} @ {bitrate} bps", "INFO")
         if progress:
             progress(5, "Opening CAN bus")
 
-        bus = _open_bus(can_interface, int(bitrate))
+        # Open CAN bus
+        bus = _open_bus(can_interface, int(bitrate), context)
         if bus is None:
             error_msg = f"Failed to open CAN bus: {can_interface}"
-            if context:
-                context.log(error_msg, "ERROR")
+            _log_error(error_msg, context)
             yield {
                 "status": "error", 
                 "data": {"error": error_msg}
             }
             return
 
-        if context:
-            context.log("BATTERY STREAM: CAN bus opened successfully", "INFO")
+        # Setup diagnostic session (optional)
+        _setup_diagnostic_session(bus, context)
+
+        _log_info("CAN bus opened successfully, starting stream", context)
 
         # Stream forever (runner will cancel when session ends)
         while True:
             iteration += 1
+            
             if context:
                 context.checkpoint()
-                if iteration % 10 == 0:  # Log every 10 iterations
-                    context.log(f"BATTERY STREAM: Iteration {iteration}", "DEBUG")
+                
+                # Send heartbeat periodically
+                now = time.time()
+                if now - last_heartbeat > HEARTBEAT_INTERVAL:
+                    _log_debug(f"Stream heartbeat: iteration {iteration}", context)
+                    last_heartbeat = now
 
             try:
-                single = _read_voltage_once(bus, context=context, progress=progress)
-            except TimeoutError:
-                # On timeout, just skip this iteration
-                if context:
-                    context.progress(60, "No response (retrying)")
-                if progress:
-                    progress(60, "No response (retrying)")
-                time.sleep(0.3)
-                continue
-            except Exception as e:
-                # Unexpected error
-                if context:
-                    context.log(f"BATTERY STREAM: Unexpected error: {e}", "ERROR")
-                yield {
-                    "status": "error",
-                    "data": {"error": str(e)}
-                }
-                time.sleep(1.0)  # Back off on error
-                continue
+                # Read voltage with retries
+                voltage_result = None
+                for attempt in range(1, MAX_RETRIES + 1):
+                    try:
+                        voltage_result = _read_voltage_once(bus, context, progress)
+                        if voltage_result.get("battery_voltage") is not None:
+                            break
+                    except TimeoutError:
+                        if attempt < MAX_RETRIES:
+                            _log_debug(f"Timeout, retrying ({attempt}/{MAX_RETRIES})", context)
+                            if context:
+                                context.sleep(RETRY_DELAY * attempt)
+                            continue
+                        raise
+                    except Exception as e:
+                        _log_warn(f"Read attempt {attempt} failed: {e}", context)
+                        if attempt < MAX_RETRIES:
+                            if context:
+                                context.sleep(RETRY_DELAY)
+                            continue
+                        raise
 
-            value = single.get("battery_voltage")
-            if value is not None:
-                if context:
-                    context.progress(100, f"Battery Voltage: {value:.1f} V")
-                    if iteration % 5 == 0:  # Log every 5 successful reads
-                        context.log(f"BATTERY STREAM: Read {value:.1f}V (iteration {iteration})", "INFO")
-                if progress:
-                    progress(100, f"Battery Voltage: {value:.1f} V")
+                if voltage_result is None:
+                    consecutive_errors += 1
+                    if consecutive_errors >= max_consecutive_errors:
+                        error_msg = f"Too many consecutive errors ({consecutive_errors})"
+                        _log_error(error_msg, context)
+                        yield {
+                            "status": "error",
+                            "data": {"error": error_msg}
+                        }
+                        return
+                    
+                    # Skip this iteration
+                    if context:
+                        context.sleep(READ_INTERVAL)
+                    continue
 
-                # YIELD for runner → service.on_stream_data → DB persist
-                yield {
-                    "status": "streaming", 
-                    "data": {"battery_voltage": value}
-                }
-            else:
-                # Invalid frame
-                if context:
-                    context.log("BATTERY STREAM: Invalid response received", "WARN")
-                yield {
-                    "status": "streaming", 
-                    "data": {}
-                }
+                # Reset error counter on success
+                consecutive_errors = 0
+                
+                value = voltage_result.get("battery_voltage")
+                
+                if value is not None:
+                    # Update progress
+                    if context:
+                        context.progress(100, f"Battery Voltage: {value:.1f} V")
+                        if iteration % 10 == 0:
+                            _log_info(f"Streaming: {value:.1f}V (iteration {iteration})", context)
+                    
+                    if progress:
+                        progress(100, f"Battery Voltage: {value:.1f} V")
 
-            # Pace the readings (runner timeout for streams is 0 = no timeout)
-            if context:
-                context.sleep(0.4)  # 400ms between readings
-            else:
-                time.sleep(0.4)
+                    # YIELD for runner → service.on_stream_data → DB persist
+                    yield {
+                        "status": "streaming", 
+                        "data": {
+                            "battery_voltage": value,
+                            "_iteration": iteration,
+                            "_timestamp": time.time(),
+                        }
+                    }
+                else:
+                    # Invalid frame
+                    _log_warn("Invalid response received", context)
+                    yield {
+                        "status": "streaming", 
+                        "data": {
+                            "_warning": "Invalid response",
+                            "_iteration": iteration,
+                        }
+                    }
+
+                # Pace the readings
+                if context:
+                    context.sleep(READ_INTERVAL)
+                else:
+                    time.sleep(READ_INTERVAL)
 
     except GeneratorExit:
         # Handle generator cleanup gracefully
-        if context:
-            context.log("BATTERY STREAM: Generator closed", "INFO")
+        _log_info("Stream generator closed", context)
+        
     except Exception as e:
-        if context:
-            context.log(f"BATTERY STREAM: Fatal error: {e}", "ERROR")
+        _log_error(f"Stream error: {e}", context)
+        _log_debug(traceback.format_exc(), context)
         yield {
             "status": "error", 
             "data": {"error": str(e)}
         }
+        
     finally:
-        if context:
-            context.log("BATTERY STREAM: Shutting down", "INFO")
+        _log_info("Shutting down battery voltage stream", context)
         if bus:
             try:
                 bus.shutdown()
-                if context:
-                    context.log("BATTERY STREAM: CAN bus closed", "INFO")
+                _log_debug("CAN bus closed", context)
             except Exception as e:
-                if context:
-                    context.log(f"BATTERY STREAM: Error closing bus: {e}", "ERROR")
+                _log_warn(f"Error closing bus: {e}", context)
+
+
+# =============================================================================
+# EXPORTS
+# =============================================================================
+
+__all__ = ["read_battery_voltage_stream"]
