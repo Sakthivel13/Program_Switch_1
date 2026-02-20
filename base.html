@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() if csrf_token else '' }}">
 
   <title>{% block title %}TVS NIRIX{% endblock %}</title>
 
@@ -11,16 +12,25 @@
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     rel="stylesheet">
 
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
   <style>
     :root {
       --tvs-blue: #143B68;
       --tvs-blue-light: #0d6efd;
+      --tvs-blue-hover: #1e4a8c;
       --shadow: 0 4px 16px rgba(0,0,0,0.25);
+      --shadow-hover: 0 8px 24px rgba(0,0,0,0.3);
 
       --bg-main: #f3f4f6;
       --text-main: #000;
       --drawer-bg: #ffffff;
       --drawer-text: #111;
+      --drawer-hover: #f1f5f9;
+      --border-color: #e5e7eb;
+      --card-bg: #ffffff;
+      --muted-text: #6b7280;
     }
 
     body.dark {
@@ -28,13 +38,20 @@
       --text-main: #e2e8f0;
       --drawer-bg: #1e293b;
       --drawer-text: #e2e8f0;
+      --drawer-hover: #334155;
+      --border-color: #334155;
+      --card-bg: #1e293b;
+      --muted-text: #94a3b8;
     }
 
     body {
       background: var(--bg-main);
       color: var(--text-main);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       transition: background 0.25s, color 0.25s;
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
     }
 
     .btn-tvs {
@@ -42,16 +59,31 @@
       color: #fff;
       border: none;
       font-weight: 600;
+      transition: all 0.2s ease;
     }
 
     .btn-tvs:hover {
-      background-color: #0d2c4d;
+      background-color: var(--tvs-blue-hover);
       color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(20, 59, 104, 0.3);
+    }
+
+    .btn-tvs:active {
+      transform: translateY(0);
+    }
+
+    .btn-tvs:disabled {
+      background-color: #94a3b8;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
 
     main {
       padding-top: {% if user %}96px{% else %}40px{% endif %};
       padding-bottom: 60px;
+      min-height: calc(100vh - 60px);
     }
 
     header.header-bar {
@@ -61,6 +93,8 @@
       padding: 8px 16px 6px;
       box-shadow: var(--shadow);
       z-index: 1000;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
 
     footer.footer-bar {
@@ -71,6 +105,14 @@
       padding: 6px 16px;
       text-align: center;
       font-size: 12px;
+      z-index: 1000;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+    }
+
+    .top-nav {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
     }
 
     .top-nav .nav-link {
@@ -79,26 +121,37 @@
       border-radius: 999px;
       font-size: 0.85rem;
       font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .top-nav .nav-link:hover {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
     }
 
     .top-nav .nav-link.active {
       background: var(--tvs-blue-light);
       color: #fff;
+      font-weight: 600;
     }
 
     .drawer-menu {
       position: fixed;
-      top: 0; right: -290px;
-      width: 260px;
+      top: 0; right: -300px;
+      width: 280px;
       height: 100%;
       background: var(--drawer-bg);
       color: var(--drawer-text);
-      padding: 20px;
+      padding: 24px 16px;
       box-shadow: var(--shadow);
       z-index: 2000;
-      transition: right 0.3s;
+      transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
     }
-    .drawer-menu.open { right: 0; }
+
+    .drawer-menu.open { 
+      right: 0; 
+    }
 
     .drawer-backdrop {
       position: fixed;
@@ -108,35 +161,204 @@
       opacity: 0;
       visibility: hidden;
       z-index: 1500;
-      transition: opacity 0.25s;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
     }
+
     .drawer-backdrop.show {
       opacity: 1;
       visibility: visible;
     }
 
     .drawer-header {
-      font-size: 13px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
       opacity: 0.7;
-      margin-top: 14px;
+      margin-top: 20px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .drawer-header:first-of-type {
+      margin-top: 0;
     }
 
     .drawer-item {
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(150,150,150,0.25);
+      padding: 12px 16px;
+      border-radius: 12px;
       cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .drawer-item i {
+      width: 20px;
+      font-size: 1rem;
+      color: var(--muted-text);
+    }
+
+    .drawer-item:hover {
+      background: var(--drawer-hover);
+      transform: translateX(-4px);
+    }
+
+    .drawer-item.text-danger:hover {
+      background: #fef2f2;
+      color: #dc2626 !important;
+    }
+
+    body.dark .drawer-item.text-danger:hover {
+      background: #7f1d1d;
+      color: #fecaca !important;
+    }
+
+    .drawer-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 16px 0;
     }
 
     .hamburger {
       width: 28px;
       cursor: pointer;
+      padding: 4px;
     }
+
     .hamburger span {
       display: block;
       height: 3px;
       margin: 5px 0;
       background: #fff;
       border-radius: 3px;
+      transition: all 0.3s ease;
+    }
+
+    .hamburger:hover span {
+      background: #e5f0ff;
+    }
+
+    .hamburger.open span:nth-child(1) {
+      transform: rotate(45deg) translate(5px, 5px);
+    }
+
+    .hamburger.open span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .hamburger.open span:nth-child(3) {
+      transform: rotate(-45deg) translate(7px, -7px);
+    }
+
+    .user-badge {
+      background: rgba(255,255,255,0.1);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: white;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Toast notifications */
+    .toast-container {
+      position: fixed;
+      top: 100px;
+      right: 20px;
+      z-index: 9999;
+    }
+
+    .toast {
+      background: var(--drawer-bg);
+      color: var(--drawer-text);
+      border-left: 4px solid;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 300px;
+      max-width: 400px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.success { border-left-color: #10b981; }
+    .toast.error { border-left-color: #ef4444; }
+    .toast.warning { border-left-color: #f59e0b; }
+    .toast.info { border-left-color: #3b82f6; }
+
+    .toast-close {
+      margin-left: auto;
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+
+    .toast-close:hover {
+      opacity: 1;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .top-nav {
+        justify-content: center;
+      }
+      
+      .drawer-menu {
+        width: 260px;
+      }
+      
+      .toast {
+        min-width: 250px;
+      }
+    }
+
+    /* Focus styles for accessibility */
+    *:focus-visible {
+      outline: 2px solid var(--tvs-blue-light);
+      outline-offset: 2px;
+    }
+
+    /* Print styles */
+    @media print {
+      header.header-bar,
+      footer.footer-bar,
+      .drawer-backdrop,
+      .drawer-menu {
+        display: none !important;
+      }
+      
+      main {
+        padding: 20px !important;
+      }
     }
   </style>
 
@@ -147,154 +369,578 @@
      user.theme if user and user.theme
      else default_theme %}
 
-<body class="{{ 'dark' if effective_theme == 'dark' else '' }}">
+<body class="{{ 'dark' if effective_theme == 'dark' else '' }}"
+      data-theme="{{ effective_theme }}"
+      data-user-id="{{ user.id if user else '' }}"
+      data-user-role="{{ user.role if user else '' }}">
+
+<!-- Toast notifications container -->
+<div id="toast-container" class="toast-container"></div>
 
 {% if user %}
-<div id="drawer_backdrop" class="drawer-backdrop" onclick="toggleDrawer()"></div>
+<!-- Drawer backdrop -->
+<div id="drawer_backdrop" class="drawer-backdrop" onclick="toggleDrawer()" aria-label="Close menu"></div>
 
-<div id="drawer_menu" class="drawer-menu">
+<!-- Drawer menu -->
+<div id="drawer_menu" class="drawer-menu" role="navigation" aria-label="User menu">
 
   <!-- USER INFO -->
   <div class="drawer-header">User</div>
-  <div class="drawer-item">
-    <strong>{{ user.name }}</strong><br>
-    <small>ID: {{ user.employee_id }}</small><br>
-    <small class="text-muted">{{ user.role|capitalize }}</small>
+  <div class="drawer-item" onclick="location.href='{{ url_for("dashboard") }}'" role="button" tabindex="0">
+    <i class="fas fa-user-circle"></i>
+    <div>
+      <strong>{{ user.name }}</strong><br>
+      <small>ID: {{ user.employee_id }}</small><br>
+      <small class="text-muted">{{ user.role|capitalize }}</small>
+    </div>
   </div>
+
+  <div class="drawer-divider"></div>
 
   <!-- PREFERENCES -->
   <div class="drawer-header">Preferences</div>
-  <div class="drawer-item" onclick="toggleThemeDB()">
-    Theme:
-    <span id="theme_label">{{ effective_theme|capitalize }}</span>
+  <div class="drawer-item" onclick="toggleThemeDB()" role="button" tabindex="0">
+    <i class="fas fa-moon" id="theme-icon"></i>
+    <div>
+      Theme: <span id="theme_label">{{ effective_theme|capitalize }}</span>
+    </div>
   </div>
+
+  <!-- SESSION INFO (FIX-66) -->
+  {% if user.login_id %}
+  <div class="drawer-item" style="cursor: default; background: transparent;">
+    <i class="fas fa-key"></i>
+    <div>
+      <small>Session ID: <span class="font-monospace">{{ user.login_id[:8] }}...</span></small>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="drawer-divider"></div>
 
   <!-- ADMIN / SUPER ADMIN -->
   {% if user.role in ["admin", "super_admin"] %}
     <div class="drawer-header">Administration</div>
 
     <div class="drawer-item"
-         onclick="location.href='{{ url_for("admin.admin_dashboard") }}'">
+         onclick="location.href='{{ url_for("admin.admin_dashboard") }}'"
+         role="button" tabindex="0">
+      <i class="fas fa-chart-line"></i>
       Admin Dashboard
     </div>
 
     <div class="drawer-item"
-         onclick="location.href='{{ url_for("admin.admin_users") }}'">
+         onclick="location.href='{{ url_for("admin.admin_users") }}'"
+         role="button" tabindex="0">
+      <i class="fas fa-users"></i>
       User Management
     </div>
 
     <div class="drawer-item"
-         onclick="location.href='{{ url_for("admin.admin_vehicles") }}'">
+         onclick="location.href='{{ url_for("admin.admin_vehicles") }}'"
+         role="button" tabindex="0">
+      <i class="fas fa-car"></i>
       Vehicle Management
     </div>
 
     <div class="drawer-item"
-         onclick="location.href='{{ url_for("admin.admin_tests") }}'">
+         onclick="location.href='{{ url_for("admin.admin_tests") }}'"
+         role="button" tabindex="0">
+      <i class="fas fa-vial"></i>
       Test Management
     </div>
 
     {% if user.role == "super_admin" %}
       <div class="drawer-item"
-           onclick="location.href='{{ url_for("admin.admin_roles") }}'">
+           onclick="location.href='{{ url_for("admin.admin_roles") }}'"
+           role="button" tabindex="0">
+        <i class="fas fa-shield-alt"></i>
         Role Management
       </div>
 
       <div class="drawer-item"
-           onclick="location.href='{{ url_for("admin.admin_config") }}'">
+           onclick="location.href='{{ url_for("admin.admin_config") }}'"
+           role="button" tabindex="0">
+        <i class="fas fa-cog"></i>
         System Configuration
       </div>
     {% endif %}
 
     <div class="drawer-item"
-         onclick="location.href='{{ url_for("admin.admin_logs") }}'">
+         onclick="location.href='{{ url_for("admin.admin_logs") }}'"
+         role="button" tabindex="0">
+      <i class="fas fa-history"></i>
       Logs Management
     </div>
+
+    <div class="drawer-divider"></div>
   {% endif %}
+
+  <!-- HELP & SUPPORT -->
+  <div class="drawer-header">Help</div>
+  <div class="drawer-item" onclick="showKeyboardShortcuts()" role="button" tabindex="0">
+    <i class="fas fa-keyboard"></i>
+    Keyboard Shortcuts
+  </div>
+
+  <div class="drawer-item" onclick="window.open('/docs', '_blank')" role="button" tabindex="0">
+    <i class="fas fa-book"></i>
+    Documentation
+  </div>
+
+  <div class="drawer-item" onclick="showAbout()" role="button" tabindex="0">
+    <i class="fas fa-info-circle"></i>
+    About
+  </div>
+
+  <div class="drawer-divider"></div>
 
   <!-- LOGOUT -->
   <div class="drawer-item text-danger"
-       onclick="location.href='{{ url_for("logout") }}'">
+       onclick="confirmLogout()"
+       role="button" tabindex="0">
+    <i class="fas fa-sign-out-alt"></i>
     Sign Out
   </div>
 </div>
 
+<!-- Header -->
 <header class="header-bar">
   <div class="d-flex justify-content-between align-items-center">
-    <div class="d-flex align-items-center gap-2">
-      <img src="{{ url_for('vehicle_image', filename='Nirix_Name_Logo.png') }}" style="height:32px;">
-      <span class="text-white fw-bold">NIRIX Diagnostics</span>
+    <div class="d-flex align-items-center gap-3">
+      <img src="{{ url_for('vehicle_image', filename='Nirix_Name_Logo.png') }}" 
+           style="height:32px; width: auto;" 
+           alt="NIRIX Logo">
+      <span class="text-white fw-bold d-none d-sm-inline">NIRIX Diagnostics</span>
     </div>
 
     <div class="d-flex align-items-center gap-3">
-      <div class="hamburger" onclick="toggleDrawer()">
+      <!-- User badge (mobile friendly) -->
+      <span class="user-badge d-none d-md-inline">
+        <i class="fas fa-user me-1"></i>{{ user.name }}
+      </span>
+      
+      <!-- Hamburger menu -->
+      <div class="hamburger" onclick="toggleDrawer()" 
+           aria-label="Menu" role="button" tabindex="0"
+           id="hamburger-icon">
         <span></span><span></span><span></span>
       </div>
     </div>
   </div>
 
   <!-- MAIN NAV -->
-  <ul class="nav top-nav mt-2">
-    <li class="nav-item">
-      <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}"
-         href="{{ url_for('dashboard') }}">Dashboard</a>
-    </li>
+  <nav class="top-nav mt-2" aria-label="Main navigation">
+    <ul class="nav">
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}"
+           href="{{ url_for('dashboard') }}">
+          <i class="fas fa-home me-1"></i>Dashboard
+        </a>
+      </li>
 
-    <li class="nav-item">
-      <a class="nav-link
-        {% if request.endpoint in ['tests_root','tests_page'] %}active{% endif %}"
-        href="{{ url_for('tests_root') }}">
-        Tests
-      </a>
-    </li>
+      <li class="nav-item">
+        <a class="nav-link
+          {% if request.endpoint in ['tests_root','tests_page'] %}active{% endif %}"
+          href="{{ url_for('tests_root') }}">
+          <i class="fas fa-flask me-1"></i>Tests
+        </a>
+      </li>
 
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint=='logs_page' %}active{% endif %}"
+           href="{{ url_for('logs_page') }}">
+          <i class="fas fa-file-alt me-1"></i>Logs
+        </a>
+      </li>
 
-    <li class="nav-item">
-      <a class="nav-link {% if request.endpoint=='logs_page' %}active{% endif %}"
-         href="{{ url_for('logs_page') }}">Logs</a>
-    </li>
-
-    <li class="nav-item">
-      <a class="nav-link {% if request.endpoint=='downloads_page' %}active{% endif %}"
-         href="{{ url_for('downloads_page') }}">Downloads</a>
-    </li>
-  </ul>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint=='downloads_page' %}active{% endif %}"
+           href="{{ url_for('downloads_page') }}">
+          <i class="fas fa-download me-1"></i>Downloads
+        </a>
+      </li>
+    </ul>
+  </nav>
 </header>
 {% endif %}
 
-<main class="container-fluid">
+<!-- Main content -->
+<main class="container-fluid" id="main-content" role="main">
   {% block content %}{% endblock %}
 </main>
 
+<!-- Footer -->
 <footer class="footer-bar">
-  © 2025 TVS NIRIX – Internal Diagnostic Tool
+  <span>© 2026 TVS NIRIX – Internal Diagnostic Tool</span>
+  <span class="mx-2">|</span>
+  <span>Version 3.2.0</span>
+  <span class="mx-2">|</span>
+  <span id="live-status" class="d-none d-md-inline">
+    <i class="fas fa-circle text-success" style="font-size: 0.5rem;"></i> Connected
+  </span>
 </footer>
 
+<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- CSRF Token for AJAX requests -->
+<script>
+  const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+</script>
 
 {% if user %}
 <script>
+// ===========================================================================
+// DRAWER MENU FUNCTIONS
+// ===========================================================================
+
+let isDrawerOpen = false;
+
 function toggleDrawer() {
-  document.getElementById("drawer_menu").classList.toggle("open");
-  document.getElementById("drawer_backdrop").classList.toggle("show");
+  const drawer = document.getElementById("drawer_menu");
+  const backdrop = document.getElementById("drawer_backdrop");
+  const hamburger = document.getElementById("hamburger-icon");
+  
+  if (!drawer || !backdrop) return;
+  
+  isDrawerOpen = !isDrawerOpen;
+  
+  drawer.classList.toggle("open");
+  backdrop.classList.toggle("show");
+  hamburger?.classList.toggle("open");
+  
+  // Prevent body scroll when drawer is open
+  document.body.style.overflow = isDrawerOpen ? 'hidden' : '';
 }
+
+// Close drawer with Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && isDrawerOpen) {
+    toggleDrawer();
+  }
+});
+
+// ===========================================================================
+// THEME MANAGEMENT (FIX-70)
+// ===========================================================================
 
 async function toggleThemeDB() {
-  const isDark = document.body.classList.contains("dark");
+  const body = document.body;
+  const isDark = body.classList.contains("dark");
   const newTheme = isDark ? "light" : "dark";
+  const themeLabel = document.getElementById("theme_label");
+  const themeIcon = document.getElementById("theme-icon");
 
-  document.body.classList.toggle("dark");
-  document.getElementById("theme_label").textContent =
-    newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+  // Optimistic update
+  body.classList.toggle("dark");
+  document.documentElement.setAttribute('data-theme', newTheme);
+  
+  if (themeLabel) {
+    themeLabel.textContent = newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+  }
+  
+  if (themeIcon) {
+    themeIcon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+  }
 
-  await fetch("/api/set_theme", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ theme: newTheme })
-  });
+  try {
+    const response = await fetch("/api/set_theme", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": CSRF_TOKEN
+      },
+      body: JSON.stringify({ theme: newTheme })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Theme update failed');
+    }
+    
+    showToast('Theme updated successfully', 'success');
+  } catch (error) {
+    console.error('Theme update failed:', error);
+    // Revert on error
+    body.classList.toggle("dark");
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    if (themeLabel) {
+      themeLabel.textContent = isDark ? 'Dark' : 'Light';
+    }
+    if (themeIcon) {
+      themeIcon.className = isDark ? 'fas fa-moon' : 'fas fa-sun';
+    }
+    showToast('Failed to update theme', 'error');
+  }
 }
+
+// Initialize theme icon
+document.addEventListener('DOMContentLoaded', () => {
+  const themeIcon = document.getElementById("theme-icon");
+  const isDark = document.body.classList.contains("dark");
+  if (themeIcon) {
+    themeIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+  }
+});
+
+// ===========================================================================
+// TOAST NOTIFICATIONS
+// ===========================================================================
+
+function showToast(message, type = 'info', duration = 5000) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  
+  // Add icon based on type
+  let icon = 'info-circle';
+  if (type === 'success') icon = 'check-circle';
+  if (type === 'error') icon = 'exclamation-circle';
+  if (type === 'warning') icon = 'exclamation-triangle';
+  
+  toast.innerHTML = `
+    <i class="fas fa-${icon}"></i>
+    <span>${message}</span>
+    <span class="toast-close" onclick="this.parentElement.remove()">
+      <i class="fas fa-times"></i>
+    </span>
+  `;
+  
+  container.appendChild(toast);
+  
+  // Auto remove after duration
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.remove();
+    }
+  }, duration);
+}
+
+// ===========================================================================
+// LOGOUT CONFIRMATION
+// ===========================================================================
+
+function confirmLogout() {
+  if (confirm('Are you sure you want to sign out?')) {
+    // Show loading state
+    const logoutItem = event?.currentTarget;
+    if (logoutItem) {
+      const originalHtml = logoutItem.innerHTML;
+      logoutItem.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing out...';
+      logoutItem.style.pointerEvents = 'none';
+      
+      // Redirect after a brief delay
+      setTimeout(() => {
+        window.location.href = '{{ url_for("logout") }}';
+      }, 300);
+    } else {
+      window.location.href = '{{ url_for("logout") }}';
+    }
+  }
+}
+
+// ===========================================================================
+// KEYBOARD SHORTCUTS
+// ===========================================================================
+
+function showKeyboardShortcuts() {
+  const shortcuts = [
+    { key: 'Alt + D', description: 'Go to Dashboard' },
+    { key: 'Alt + T', description: 'Go to Tests' },
+    { key: 'Alt + L', description: 'Go to Logs' },
+    { key: 'Alt + M', description: 'Open Menu' },
+    { key: 'Esc', description: 'Close Menu' },
+    { key: 'Ctrl + ,', description: 'Toggle Theme' }
+  ];
+  
+  let html = '<div class="shortcuts-list">';
+  shortcuts.forEach(s => {
+    html += `
+      <div class="d-flex justify-content-between mb-2">
+        <kbd>${s.key}</kbd>
+        <span>${s.description}</span>
+      </div>
+    `;
+  });
+  html += '</div>';
+  
+  // You could show this in a modal - for now just console
+  console.log('Keyboard Shortcuts:', shortcuts);
+  showToast('Press Alt+H for help', 'info');
+}
+
+function showAbout() {
+  showToast('NIRIX Diagnostics v3.2.0', 'info');
+}
+
+// ===========================================================================
+// KEYBOARD SHORTCUT HANDLER
+// ===========================================================================
+
+document.addEventListener('keydown', (e) => {
+  // Alt + D -> Dashboard
+  if (e.altKey && e.key === 'd') {
+    e.preventDefault();
+    window.location.href = '{{ url_for("dashboard") }}';
+  }
+  
+  // Alt + T -> Tests
+  if (e.altKey && e.key === 't') {
+    e.preventDefault();
+    window.location.href = '{{ url_for("tests_root") }}';
+  }
+  
+  // Alt + L -> Logs
+  if (e.altKey && e.key === 'l') {
+    e.preventDefault();
+    window.location.href = '{{ url_for("logs_page") }}';
+  }
+  
+  // Alt + M -> Open menu
+  if (e.altKey && e.key === 'm') {
+    e.preventDefault();
+    toggleDrawer();
+  }
+  
+  // Ctrl + , -> Toggle theme
+  if (e.ctrlKey && e.key === ',') {
+    e.preventDefault();
+    toggleThemeDB();
+  }
+  
+  // Alt + H -> Help
+  if (e.altKey && e.key === 'h') {
+    e.preventDefault();
+    showKeyboardShortcuts();
+  }
+});
+
+// ===========================================================================
+// SESSION HEARTBEAT (FIX-69)
+// ===========================================================================
+
+let heartbeatInterval = null;
+
+function startHeartbeat() {
+  // Send heartbeat every 5 minutes
+  heartbeatInterval = setInterval(async () => {
+    try {
+      const response = await fetch('/api/session/heartbeat', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': CSRF_TOKEN
+        }
+      });
+      
+      if (!response.ok) {
+        console.warn('Heartbeat failed');
+      }
+    } catch (error) {
+      console.error('Heartbeat error:', error);
+    }
+  }, 300000); // 5 minutes
+}
+
+function stopHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+
+// Start heartbeat when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  startHeartbeat();
+});
+
+// Stop heartbeat when page unloads
+window.addEventListener('beforeunload', () => {
+  stopHeartbeat();
+});
+
+// ===========================================================================
+// NETWORK STATUS MONITORING
+// ===========================================================================
+
+function updateOnlineStatus() {
+  const statusEl = document.getElementById('live-status');
+  if (!statusEl) return;
+  
+  if (navigator.onLine) {
+    statusEl.innerHTML = '<i class="fas fa-circle text-success" style="font-size: 0.5rem;"></i> Connected';
+    statusEl.className = 'd-none d-md-inline';
+  } else {
+    statusEl.innerHTML = '<i class="fas fa-circle text-danger" style="font-size: 0.5rem;"></i> Offline';
+    statusEl.className = 'd-none d-md-inline';
+    showToast('You are offline. Some features may be unavailable.', 'warning');
+  }
+}
+
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+
+// ===========================================================================
+// AUTO-RUN SESSION CHECK (FIX-66)
+// ===========================================================================
+
+// Check for existing auto-run sessions on page load
+async function checkAutoRunSession() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const sessionId = urlParams.get('auto_run_session_id');
+  
+  if (sessionId) {
+    try {
+      const response = await fetch(`/api/auto_run/${sessionId}/status`);
+      const data = await response.json();
+      
+      if (data.ok && data.db_session) {
+        // Store session info in sessionStorage for this login
+        const loginId = '{{ user.login_id if user.login_id else "" }}';
+        if (loginId) {
+          sessionStorage.setItem(`nirix_auto_run_${loginId}`, sessionId);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check auto-run session:', error);
+    }
+  }
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', () => {
+  checkAutoRunSession();
+  updateOnlineStatus();
+});
+
 </script>
 {% endif %}
 
 {% block scripts %}{% endblock %}
+
+<!-- Error handling for JavaScript -->
+<script>
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+  console.error('JavaScript Error:', {msg, url, lineNo, columnNo, error});
+  
+  // Don't show toast for every error, but log to server if available
+  if (navigator.sendBeacon) {
+    const errorData = JSON.stringify({
+      message: msg,
+      url: url,
+      line: lineNo,
+      column: columnNo,
+      stack: error?.stack,
+      userAgent: navigator.userAgent
+    });
+    
+    navigator.sendBeacon('/api/log/client_error', errorData);
+  }
+  
+  return false;
+};
+</script>
+
 </body>
 </html>
