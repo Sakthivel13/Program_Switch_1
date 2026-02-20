@@ -1,0 +1,431 @@
+1-Table_name : 'auto_run_results'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"auto_run_results"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"auto_run_results"	"error_message"	"text"	"YES"			
+"app"	"auto_run_results"	"id"	"integer"	"NO"	"nextval('app.auto_run_results_id_seq'::regclass)"	"PRIMARY KEY: auto_run_results_pkey | auto_run_results_id_not_null"	"auto_run_results_pkey"
+"app"	"auto_run_results"	"log_as_vin"	"boolean"	"NO"	"false"	"auto_run_results_log_as_vin_not_null"	
+"app"	"auto_run_results"	"manual_input"	"boolean"	"YES"	"false"		
+"app"	"auto_run_results"	"passed"	"boolean"	"YES"			
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	"NO"		"auto_run_results_program_id_not_null"	"idx_auto_run_results_program | uq_auto_run_results_session_program | uq_auto_run_session_program"
+"app"	"auto_run_results"	"program_name"	"character varying(255)"	"YES"			
+"app"	"auto_run_results"	"program_type"	"character varying(20)"	"NO"	"'single'::character varying"	"CHECK: auto_run_results_type_check (CHECK (program_type::text = | auto_run_results_program_type_not_null"	
+"app"	"auto_run_results"	"result_data"	"jsonb"	"YES"			
+"app"	"auto_run_results"	"result_value"	"text"	"YES"			
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	"NO"		"FOREIGN KEY: auto_run_results_session_id_fkey -> FOREIGN KEY (s | auto_run_results_session_id_not_null"	"idx_auto_run_results_session | uq_auto_run_results_session_program | uq_auto_run_session_program"
+"app"	"auto_run_results"	"source"	"text"	"YES"	"'section'::text"		"idx_auto_run_results_source"
+"app"	"auto_run_results"	"status"	"character varying(20)"	"NO"	"'pending'::character varying"	"CHECK: auto_run_results_status_check (CHECK (status::text = ANY | auto_run_results_status_not_null"	
+"app"	"auto_run_results"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"auto_run_results"	"user_id"	"integer"	"YES"			
+"app"	"auto_run_results"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: auto_run_results_vehicle_id_fkey -> FOREIGN KEY (v | auto_run_results_vehicle_id_not_null"	"idx_auto_run_results_session | uq_auto_run_session_program"
+
+
+2-Table_name : 'auto_run_sessions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"auto_run_sessions"	"ended_at"	"timestamp without time zone"	"YES"			
+"app"	"auto_run_sessions"	"id"	"integer"	"NO"	"nextval('app.auto_run_sessions_id_seq'::regclass)"	"PRIMARY KEY: auto_run_sessions_pkey | auto_run_sessions_id_not_null"	"auto_run_sessions_pkey"
+"app"	"auto_run_sessions"	"programs_config"	"jsonb"	"YES"			
+"app"	"auto_run_sessions"	"section_type"	"character varying(30)"	"NO"	"'diagnostics'::character varying"	"auto_run_sessions_section_type_not_null"	
+"app"	"auto_run_sessions"	"session_id"	"character varying(100)"	"NO"		"UNIQUE: auto_run_sessions_session_id_key | auto_run_sessions_session_id_not_null"	"auto_run_sessions_session_id_key"
+"app"	"auto_run_sessions"	"started_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	"NO"	"'started'::character varying"	"CHECK: auto_run_sessions_status_check (CHECK (status::text = AN | auto_run_sessions_status_not_null"	"idx_auto_run_sessions_status | idx_auto_run_sessions_vehicle"
+"app"	"auto_run_sessions"	"user_id"	"integer"	"YES"		"FOREIGN KEY: auto_run_sessions_user_id_fkey -> FOREIGN KEY (use"	"idx_auto_run_sessions_user"
+"app"	"auto_run_sessions"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: auto_run_sessions_vehicle_id_fkey -> FOREIGN KEY ( | auto_run_sessions_vehicle_id_not_null"	"idx_auto_run_sessions_vehicle"
+"app"	"auto_run_sessions"	"vehicle_name"	"character varying(255)"	"NO"		"auto_run_sessions_vehicle_name_not_null"	
+"app"	"auto_run_sessions"	"vin"	"character varying(50)"	"YES"			"idx_auto_run_sessions_vin"
+"app"	"auto_run_sessions"	"vin_input_needed"	"boolean"	"YES"	"false"		
+"app"	"auto_run_sessions"	"vin_source"	"character varying(20)"	"YES"	"'none'::character varying"	"CHECK: auto_run_sessions_vin_source_check (CHECK (vin_source::t"	
+
+3-Table_name : 'auto_run_stream_values'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"auto_run_stream_values"	"id"	"integer"	"NO"	"nextval('app.auto_run_stream_values_id_seq'::regclass)"	"PRIMARY KEY: auto_run_stream_values_pkey | auto_run_stream_values_id_not_null"	"auto_run_stream_values_pkey"
+"app"	"auto_run_stream_values"	"is_within_limit"	"boolean"	"YES"	"true"		
+"app"	"auto_run_stream_values"	"lsl"	"numeric"	"YES"			
+"app"	"auto_run_stream_values"	"program_id"	"character varying(100)"	"NO"		"auto_run_stream_values_program_id_not_null"	"uq_stream_session_signal"
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	"NO"		"FOREIGN KEY: auto_run_stream_values_session_id_fkey -> FOREIGN  | auto_run_stream_values_session_id_not_null"	"idx_auto_run_stream_values_session | idx_auto_run_stream_values_session_signal | idx_stream_values_session | uq_stream_session_signal"
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	"NO"		"auto_run_stream_values_signal_name_not_null"	"idx_auto_run_stream_values_session_signal | uq_stream_session_signal"
+"app"	"auto_run_stream_values"	"signal_unit"	"character varying(20)"	"YES"			
+"app"	"auto_run_stream_values"	"signal_value"	"numeric"	"YES"			
+"app"	"auto_run_stream_values"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		"idx_auto_run_stream_values_updated"
+"app"	"auto_run_stream_values"	"usl"	"numeric"	"YES"			
+"app"	"auto_run_stream_values"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: auto_run_stream_values_vehicle_id_fkey -> FOREIGN  | auto_run_stream_values_vehicle_id_not_null"	"idx_stream_values_session | uq_stream_session_signal"
+
+4-Table_name : 'config'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"config"	"created_at"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"config_created_at_not_null"	
+"app"	"config"	"id"	"bigint"	"NO"	"nextval('app.config_id_seq'::regclass)"	"PRIMARY KEY: config_pkey | config_id_not_null"	"config_pkey"
+"app"	"config"	"key_name"	"character varying(255)"	"NO"		"UNIQUE: uq_config_key_name | UNIQUE: uq_user_config | config_key_name_not_null"	"idx_config_key | uq_config_key_name | uq_user_config"
+"app"	"config"	"updated_at"	"timestamp without time zone"	"YES"			
+"app"	"config"	"user_id"	"bigint"	"YES"		"FOREIGN KEY: config_user_id_fkey -> FOREIGN KEY (user_id) REFER | UNIQUE: uq_user_config"	"idx_config_user | uq_user_config"
+"app"	"config"	"value_text"	"text"	"YES"			
+
+5-Table_name : 'diagnostic_actions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"diagnostic_actions"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"diagnostic_actions"	"description"	"text"	"YES"			
+"app"	"diagnostic_actions"	"execution_class"	"character varying(20)"	"YES"		"CHECK: diagnostic_actions_execution_class_check (CHECK (executi"	
+"app"	"diagnostic_actions"	"folder_id"	"integer"	"NO"		"FOREIGN KEY: diagnostic_actions_folder_id_fkey -> FOREIGN KEY ( | UNIQUE: diagnostic_actions_folder_id_parameter_code_key | diagnostic_actions_folder_id_not_null"	"diagnostic_actions_folder_id_parameter_code_key | idx_diagnostic_actions_folder"
+"app"	"diagnostic_actions"	"icon"	"character varying(100)"	"YES"	"NULL::character varying"		
+"app"	"diagnostic_actions"	"id"	"integer"	"NO"	"nextval('app.diagnostic_actions_id_seq'::regclass)"	"PRIMARY KEY: diagnostic_actions_pkey | diagnostic_actions_id_not_null"	"diagnostic_actions_pkey"
+"app"	"diagnostic_actions"	"is_active"	"boolean"	"YES"	"true"		"idx_diagnostic_actions_folder"
+"app"	"diagnostic_actions"	"label"	"character varying(200)"	"YES"			
+"app"	"diagnostic_actions"	"parameter_code"	"character varying(100)"	"NO"		"UNIQUE: diagnostic_actions_folder_id_parameter_code_key | diagnostic_actions_parameter_code_not_null"	"diagnostic_actions_folder_id_parameter_code_key"
+"app"	"diagnostic_actions"	"sort_order"	"integer"	"YES"	"0"		
+
+6-Table_name : 'diagnostic_folders'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"diagnostic_folders"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"diagnostic_folders"	"description"	"text"	"YES"			
+"app"	"diagnostic_folders"	"ecu_code"	"character varying(50)"	"NO"		"UNIQUE: diagnostic_folders_ecu_code_key | diagnostic_folders_ecu_code_not_null"	"diagnostic_folders_ecu_code_key | idx_diagnostic_folders_ecu_code"
+"app"	"diagnostic_folders"	"ecu_name"	"character varying(100)"	"NO"		"diagnostic_folders_ecu_name_not_null"	
+"app"	"diagnostic_folders"	"emission"	"character varying(50)"	"YES"			
+"app"	"diagnostic_folders"	"icon"	"character varying(100)"	"YES"	"NULL::character varying"		
+"app"	"diagnostic_folders"	"id"	"integer"	"NO"	"nextval('app.diagnostic_folders_id_seq'::regclass)"	"PRIMARY KEY: diagnostic_folders_pkey | diagnostic_folders_id_not_null"	"diagnostic_folders_pkey"
+"app"	"diagnostic_folders"	"is_active"	"boolean"	"YES"	"true"		
+"app"	"diagnostic_folders"	"protocol"	"character varying(20)"	"YES"		"CHECK: diagnostic_folders_protocol_check (CHECK (protocol::text"	
+"app"	"diagnostic_folders"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"diagnostic_folders"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+
+7-Table_name : 'diagnostic_sections'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"diagnostic_sections"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"diagnostic_sections"	"description"	"text"	"YES"			
+"app"	"diagnostic_sections"	"id"	"integer"	"NO"	"nextval('app.diagnostic_sections_id_seq'::regclass)"	"PRIMARY KEY: diagnostic_sections_pkey | diagnostic_sections_id_not_null"	"diagnostic_sections_pkey"
+"app"	"diagnostic_sections"	"is_active"	"boolean"	"YES"	"true"		
+"app"	"diagnostic_sections"	"section_code"	"character varying(50)"	"NO"		"UNIQUE: diagnostic_sections_section_code_key | diagnostic_sections_section_code_not_null"	"diagnostic_sections_section_code_key"
+"app"	"diagnostic_sections"	"section_name"	"character varying(100)"	"NO"		"diagnostic_sections_section_name_not_null"	
+"app"	"diagnostic_sections"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"diagnostic_sections"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+
+8-Table_name : 'ecu_active_status'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	"NO"		"UNIQUE: uq_ecu_active_session_ecu | UNIQUE: uq_ecu_status_session | UNIQUE: uq_ecu_status_session_old | ecu_active_status_ecu_code_not_null"	"idx_ecu_active_status_ecu | idx_ecu_active_status_session_ecu | uq_ecu_active_session_ecu | uq_ecu_status_session | uq_ecu_status_session_old"
+"app"	"ecu_active_status"	"error_count"	"integer"	"YES"	"0"		
+"app"	"ecu_active_status"	"id"	"integer"	"NO"	"nextval('app.ecu_active_status_id_seq'::regclass)"	"PRIMARY KEY: ecu_active_status_pkey | ecu_active_status_id_not_null"	"ecu_active_status_pkey"
+"app"	"ecu_active_status"	"is_active"	"boolean"	"YES"	"false"		
+"app"	"ecu_active_status"	"last_response"	"timestamp without time zone"	"YES"			
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	"NO"		"FOREIGN KEY: ecu_active_status_session_id_fkey -> FOREIGN KEY ( | UNIQUE: uq_ecu_active_session_ecu | UNIQUE: uq_ecu_status_session | UNIQUE: uq_ecu_status_session_old | ecu_active_status_session_id_not_null"	"idx_ecu_active_status_session | idx_ecu_active_status_session_ecu | idx_ecu_status_session | uq_ecu_active_session_ecu | uq_ecu_status_session | uq_ecu_status_session_old"
+"app"	"ecu_active_status"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"ecu_active_status"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: ecu_active_status_vehicle_id_fkey -> FOREIGN KEY ( | UNIQUE: uq_ecu_status_session | UNIQUE: uq_ecu_status_session_old | ecu_active_status_vehicle_id_not_null"	"idx_ecu_status_session | uq_ecu_status_session | uq_ecu_status_session_old"
+
+9-Table_name : 'live_system_track'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"live_system_track"	"first_seen"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"live_system_track_first_seen_not_null"	
+"app"	"live_system_track"	"host_name"	"character varying(128)"	"NO"		"live_system_track_host_name_not_null"	
+"app"	"live_system_track"	"id"	"bigint"	"NO"	"nextval('app.live_system_track_id_seq'::regclass)"	"PRIMARY KEY: live_system_track_pkey | live_system_track_id_not_null"	"live_system_track_pkey"
+"app"	"live_system_track"	"ip_address"	"character varying(45)"	"NO"		"live_system_track_ip_address_not_null"	
+"app"	"live_system_track"	"is_active"	"boolean"	"NO"	"true"	"live_system_track_is_active_not_null"	"idx_live_system_active"
+"app"	"live_system_track"	"last_active_at"	"timestamp without time zone"	"YES"			"idx_live_system_last_active"
+"app"	"live_system_track"	"last_seen"	"timestamp without time zone"	"YES"			
+"app"	"live_system_track"	"os_name"	"character varying(128)"	"NO"		"live_system_track_os_name_not_null"	
+"app"	"live_system_track"	"server_base_url"	"character varying(255)"	"NO"		"UNIQUE: uq_live_system_session_server | live_system_track_server_base_url_not_null"	"idx_live_system_server | uq_live_system_identity | uq_live_system_session_server"
+"app"	"live_system_track"	"session_id"	"character varying(64)"	"NO"		"UNIQUE: uq_live_system_session_server | live_system_track_session_id_not_null"	"uq_live_system_identity | uq_live_system_session_server"
+"app"	"live_system_track"	"user_id"	"bigint"	"NO"		"FOREIGN KEY: fk_live_system_user -> FOREIGN KEY (user_id) REFER | live_system_track_user_id_not_null"	"idx_live_system_user"
+
+10-Table_name : 'logs'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"logs"	"auto_run_session_id"	"character varying(100)"	"YES"	"NULL::character varying"		"idx_logs_auto_run_session"
+"app"	"logs"	"created_at"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"logs_created_at_not_null"	"idx_logs_created"
+"app"	"logs"	"deleted_at"	"timestamp without time zone"	"YES"			
+"app"	"logs"	"filename"	"character varying(255)"	"NO"		"logs_filename_not_null"	
+"app"	"logs"	"id"	"bigint"	"NO"	"nextval('app.logs_id_seq'::regclass)"	"PRIMARY KEY: logs_pkey | logs_id_not_null"	"logs_pkey"
+"app"	"logs"	"is_deleted"	"boolean"	"NO"	"false"	"logs_is_deleted_not_null"	"idx_logs_deleted"
+"app"	"logs"	"user_id"	"bigint"	"NO"		"FOREIGN KEY: logs_user_id_fkey -> FOREIGN KEY (user_id) REFEREN | logs_user_id_not_null"	"idx_logs_user"
+"app"	"logs"	"vehicle_id"	"bigint"	"YES"		"FOREIGN KEY: logs_vehicle_id_fkey -> FOREIGN KEY (vehicle_id) R"	"idx_logs_vehicle_id"
+"app"	"logs"	"vehicle_name"	"character varying(255)"	"NO"		"logs_vehicle_name_not_null"	"idx_logs_vehicle"
+"app"	"logs"	"vin"	"character varying(17)"	"YES"			"idx_logs_vin"
+"app"	"logs"	"vin_source"	"character varying(20)"	"YES"	"NULL::character varying"		
+
+11-Table_name : 'roles'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"roles"	"created_at"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"roles_created_at_not_null"	
+"app"	"roles"	"id"	"bigint"	"NO"	"nextval('app.roles_id_seq'::regclass)"	"PRIMARY KEY: roles_pkey | roles_id_not_null"	"roles_pkey"
+"app"	"roles"	"name"	"character varying(64)"	"NO"		"UNIQUE: roles_name_key | UNIQUE: uq_roles_name | roles_name_not_null"	"roles_name_key | uq_roles_name"
+
+12-Table_name : 'schema_lock'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"schema_lock"	"locked"	"boolean"	"NO"	"true"	"schema_lock_locked_not_null"	
+"app"	"schema_lock"	"locked_at"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"schema_lock_locked_at_not_null"	
+"app"	"schema_lock"	"version"	"text"	"NO"		"schema_lock_version_not_null"	
+
+13-Table_name : 'test_definition_versions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"test_definition_versions"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"test_definition_versions"	"id"	"integer"	"NO"	"nextval('app.test_definition_versions_id_seq'::regclass)"	"PRIMARY KEY: test_definition_versions_pkey | test_definition_versions_id_not_null"	"test_definition_versions_pkey"
+"app"	"test_definition_versions"	"is_active"	"boolean"	"YES"	"true"		"idx_test_definition_versions_vehicle"
+"app"	"test_definition_versions"	"schema_version"	"character varying(20)"	"YES"			
+"app"	"test_definition_versions"	"source"	"character varying(50)"	"YES"	"'filesystem'::character varying"		
+"app"	"test_definition_versions"	"tests_hash"	"character varying(64)"	"NO"		"UNIQUE: test_definition_versions_vehicle_id_tests_hash_key | test_definition_versions_tests_hash_not_null"	"test_definition_versions_vehicle_id_tests_hash_key"
+"app"	"test_definition_versions"	"updated_at"	"timestamp without time zone"	"YES"			
+"app"	"test_definition_versions"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: test_definition_versions_vehicle_id_fkey -> FOREIG | UNIQUE: test_definition_versions_vehicle_id_tests_hash_key | test_definition_versions_vehicle_id_not_null"	"idx_test_definition_versions_vehicle | test_definition_versions_vehicle_id_tests_hash_key"
+
+14-Table_name : 'test_execution_config'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"test_execution_config"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"test_execution_config"	"execution_mode"	"character varying(20)"	"NO"		"CHECK: test_execution_config_execution_mode_check (CHECK (execu | test_execution_config_execution_mode_not_null"	
+"app"	"test_execution_config"	"id"	"integer"	"NO"	"nextval('app.test_execution_config_id_seq'::regclass)"	"PRIMARY KEY: test_execution_config_pkey | test_execution_config_id_not_null"	"test_execution_config_pkey"
+"app"	"test_execution_config"	"max_retries"	"integer"	"YES"	"3"		
+"app"	"test_execution_config"	"retry_delay_sec"	"numeric(5,2)"	"YES"	"1.5"		
+"app"	"test_execution_config"	"retry_on_exception"	"boolean"	"YES"	"false"		
+"app"	"test_execution_config"	"retry_on_timeout"	"boolean"	"YES"	"false"		
+"app"	"test_execution_config"	"supports_run_all"	"boolean"	"YES"	"true"		
+"app"	"test_execution_config"	"test_id"	"character varying(100)"	"NO"		"UNIQUE: test_execution_config_test_id_key | test_execution_config_test_id_not_null"	"idx_test_execution_config_test_id | test_execution_config_test_id_key"
+"app"	"test_execution_config"	"timeout_sec"	"integer"	"YES"	"15"		
+"app"	"test_execution_config"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+
+15-Table_name : 'test_execution_results'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"test_execution_results"	"attempts"	"integer"	"YES"	"1"		
+"app"	"test_execution_results"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		"idx_test_execution_results_created | idx_test_execution_results_test | idx_test_execution_results_user | idx_test_execution_results_vehicle"
+"app"	"test_execution_results"	"duration_ms"	"integer"	"YES"			
+"app"	"test_execution_results"	"exception"	"text"	"YES"			
+"app"	"test_execution_results"	"id"	"integer"	"NO"	"nextval('app.test_execution_results_id_seq'::regclass)"	"PRIMARY KEY: test_execution_results_pkey | test_execution_results_id_not_null"	"test_execution_results_pkey"
+"app"	"test_execution_results"	"limit_violations"	"jsonb"	"YES"	"'[]'::jsonb"		
+"app"	"test_execution_results"	"output_json"	"jsonb"	"YES"			
+"app"	"test_execution_results"	"pass"	"boolean"	"YES"			
+"app"	"test_execution_results"	"task_id"	"character varying(100)"	"NO"		"test_execution_results_task_id_not_null"	
+"app"	"test_execution_results"	"test_id"	"character varying(100)"	"YES"			"idx_test_execution_results_test | idx_test_execution_results_test_id"
+"app"	"test_execution_results"	"user_id"	"integer"	"YES"		"FOREIGN KEY: test_execution_results_user_id_fkey -> FOREIGN KEY"	"idx_test_execution_results_user"
+"app"	"test_execution_results"	"vehicle_id"	"integer"	"YES"		"FOREIGN KEY: test_execution_results_vehicle_id_fkey -> FOREIGN "	"idx_test_execution_results_vehicle"
+
+16-Table_name : 'test_flashing_config'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"test_flashing_config"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"test_flashing_config"	"file_name"	"character varying(255)"	"NO"		"test_flashing_config_file_name_not_null"	
+"app"	"test_flashing_config"	"file_type"	"character varying(10)"	"NO"		"CHECK: test_flashing_config_file_type_check (CHECK (file_type:: | test_flashing_config_file_type_not_null"	
+"app"	"test_flashing_config"	"id"	"integer"	"NO"	"nextval('app.test_flashing_config_id_seq'::regclass)"	"PRIMARY KEY: test_flashing_config_pkey | test_flashing_config_id_not_null"	"test_flashing_config_pkey"
+"app"	"test_flashing_config"	"method"	"character varying(20)"	"NO"		"CHECK: test_flashing_config_method_check (CHECK (method::text = | test_flashing_config_method_not_null"	
+"app"	"test_flashing_config"	"required_inputs"	"jsonb"	"YES"	"'[]'::jsonb"		
+"app"	"test_flashing_config"	"test_id"	"character varying(100)"	"NO"		"UNIQUE: test_flashing_config_test_id_key | test_flashing_config_test_id_not_null"	"test_flashing_config_test_id_key"
+
+17-Table_name : 'test_inputs'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"test_inputs"	"config_key"	"character varying(100)"	"YES"			
+"app"	"test_inputs"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"test_inputs"	"default_value"	"text"	"YES"			
+"app"	"test_inputs"	"enum_values"	"jsonb"	"YES"			
+"app"	"test_inputs"	"format_hint"	"character varying(200)"	"YES"			
+"app"	"test_inputs"	"id"	"integer"	"NO"	"nextval('app.test_inputs_id_seq'::regclass)"	"PRIMARY KEY: test_inputs_pkey | test_inputs_id_not_null"	"test_inputs_pkey"
+"app"	"test_inputs"	"input_type"	"character varying(20)"	"NO"		"CHECK: test_inputs_input_type_check (CHECK (input_type::text =  | test_inputs_input_type_not_null"	
+"app"	"test_inputs"	"is_required"	"boolean"	"YES"	"false"		
+"app"	"test_inputs"	"label"	"character varying(200)"	"YES"			
+"app"	"test_inputs"	"length"	"integer"	"YES"			
+"app"	"test_inputs"	"max_value"	"numeric"	"YES"			
+"app"	"test_inputs"	"min_value"	"numeric"	"YES"			
+"app"	"test_inputs"	"name"	"character varying(100)"	"NO"		"UNIQUE: test_inputs_test_id_name_key | test_inputs_name_not_null"	"test_inputs_test_id_name_key | uq_test_inputs_test_id_name"
+"app"	"test_inputs"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"test_inputs"	"test_id"	"character varying(100)"	"NO"		"UNIQUE: test_inputs_test_id_name_key | test_inputs_test_id_not_null"	"idx_test_inputs_test_id | test_inputs_test_id_name_key | uq_test_inputs_test_id_name"
+
+18-Table_name : 'test_output_limits'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"test_output_limits"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"test_output_limits"	"id"	"integer"	"NO"	"nextval('app.test_output_limits_id_seq'::regclass)"	"PRIMARY KEY: test_output_limits_pkey | test_output_limits_id_not_null"	"test_output_limits_pkey"
+"app"	"test_output_limits"	"lsl"	"numeric"	"YES"			
+"app"	"test_output_limits"	"signal"	"character varying(100)"	"NO"		"UNIQUE: test_output_limits_test_id_signal_key | test_output_limits_signal_not_null"	"test_output_limits_test_id_signal_key"
+"app"	"test_output_limits"	"test_id"	"character varying(100)"	"NO"		"UNIQUE: test_output_limits_test_id_signal_key | test_output_limits_test_id_not_null"	"idx_test_output_limits_test | test_output_limits_test_id_signal_key"
+"app"	"test_output_limits"	"unit"	"character varying(50)"	"YES"			
+"app"	"test_output_limits"	"usl"	"numeric"	"YES"			
+
+19-Table_name : 'tests'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"tests"	"button_name"	"character varying(50)"	"YES"	"'Run'::character varying"		
+"app"	"tests"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"tests"	"description"	"text"	"YES"			
+"app"	"tests"	"ecu"	"character varying(100)"	"YES"			"idx_tests_lookup"
+"app"	"tests"	"function_name"	"character varying(100)"	"NO"		"tests_function_name_not_null"	
+"app"	"tests"	"function_role"	"character varying(20)"	"YES"		"CHECK: tests_function_role_check (CHECK (function_role::text = "	
+"app"	"tests"	"id"	"character varying(100)"	"NO"		"PRIMARY KEY: tests_pkey | tests_id_not_null"	"tests_pkey"
+"app"	"tests"	"is_active"	"boolean"	"YES"	"true"		"idx_tests_vehicle"
+"app"	"tests"	"is_deleted"	"boolean"	"YES"	"false"		
+"app"	"tests"	"label"	"character varying(200)"	"NO"		"tests_label_not_null"	
+"app"	"tests"	"module_name"	"character varying(100)"	"NO"		"tests_module_name_not_null"	
+"app"	"tests"	"parameter"	"character varying(200)"	"NO"		"tests_parameter_not_null"	"idx_tests_lookup | idx_tests_section_parameter"
+"app"	"tests"	"parameter_page_type"	"character varying(50)"	"NO"		"CHECK: tests_parameter_page_type_check (CHECK (parameter_page_t | tests_parameter_page_type_not_null"	"idx_tests_page_type"
+"app"	"tests"	"section"	"character varying(50)"	"NO"		"CHECK: tests_section_check (CHECK (section::text = ANY (ARRAY[' | tests_section_not_null"	"idx_tests_lookup | idx_tests_section_parameter"
+"app"	"tests"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"tests"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"tests"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: tests_vehicle_id_fkey -> FOREIGN KEY (vehicle_id)  | tests_vehicle_id_not_null"	"idx_tests_lookup | idx_tests_vehicle | idx_tests_vehicle_id"
+"app"	"tests"	"version"	"character varying(20)"	"YES"	"'1.0'::character varying"		
+
+20-Table_name : 'user_health_permissions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"user_health_permissions"	"action_id"	"bigint"	"NO"		"PRIMARY KEY: user_health_permissions_pkey | user_health_permissions_action_id_not_null"	"user_health_permissions_pkey"
+"app"	"user_health_permissions"	"user_id"	"bigint"	"NO"		"FOREIGN KEY: user_health_permissions_user_id_fkey -> FOREIGN KE | PRIMARY KEY: user_health_permissions_pkey | user_health_permissions_user_id_not_null"	"user_health_permissions_pkey"
+
+21-Table_name : 'user_test_permissions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"user_test_permissions"	"expires_at"	"timestamp without time zone"	"YES"			
+"app"	"user_test_permissions"	"granted_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"user_test_permissions"	"granted_by"	"integer"	"YES"		"FOREIGN KEY: user_test_permissions_granted_by_fkey -> FOREIGN K"	
+"app"	"user_test_permissions"	"id"	"integer"	"NO"	"nextval('app.user_test_permissions_id_seq'::regclass)"	"PRIMARY KEY: user_test_permissions_pkey | user_test_permissions_id_not_null"	"user_test_permissions_pkey"
+"app"	"user_test_permissions"	"is_active"	"boolean"	"YES"	"true"		"idx_user_test_permissions_user"
+"app"	"user_test_permissions"	"permission_type"	"character varying(20)"	"YES"	"'execute'::character varying"	"CHECK: user_test_permissions_permission_type_check (CHECK (perm | UNIQUE: user_test_permissions_user_id_test_action_id_permission"	"user_test_permissions_user_id_test_action_id_permission_typ_key"
+"app"	"user_test_permissions"	"test_action_id"	"character varying(100)"	"NO"		"UNIQUE: user_test_permissions_user_id_test_action_id_permission | user_test_permissions_test_action_id_not_null"	"idx_user_test_permissions_test | user_test_permissions_user_id_test_action_id_permission_typ_key"
+"app"	"user_test_permissions"	"user_id"	"integer"	"NO"		"FOREIGN KEY: user_test_permissions_user_id_fkey -> FOREIGN KEY  | UNIQUE: user_test_permissions_user_id_test_action_id_permission | user_test_permissions_user_id_not_null"	"idx_user_test_permissions_user | user_test_permissions_user_id_test_action_id_permission_typ_key"
+
+22-Table_name : 'user_vehicle_permissions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"user_vehicle_permissions"	"created_at"	"timestamp without time zone"	"YES"	"now()"		
+"app"	"user_vehicle_permissions"	"granted_at"	"timestamp without time zone"	"YES"	"now()"		
+"app"	"user_vehicle_permissions"	"granted_by"	"integer"	"YES"		"FOREIGN KEY: fk_uvp_granted_by -> FOREIGN KEY (granted_by) REFE"	
+"app"	"user_vehicle_permissions"	"is_active"	"boolean"	"NO"	"true"	"user_vehicle_permissions_is_active_not_null"	
+"app"	"user_vehicle_permissions"	"user_id"	"integer"	"NO"		"FOREIGN KEY: fk_uvp_user -> FOREIGN KEY (user_id) REFERENCES ap | UNIQUE: uq_user_vehicle | user_vehicle_permissions_user_id_not_null"	"idx_uvp_user | idx_uvp_user_id | uq_user_vehicle"
+"app"	"user_vehicle_permissions"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: fk_uvp_vehicle -> FOREIGN KEY (vehicle_id) REFEREN | UNIQUE: uq_user_vehicle | user_vehicle_permissions_vehicle_id_not_null"	"idx_uvp_vehicle | idx_uvp_vehicle_id | uq_user_vehicle"
+
+23-Table_name : 'users'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"users"	"created_at"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"users_created_at_not_null"	
+"app"	"users"	"deleted_at"	"timestamp without time zone"	"YES"			
+"app"	"users"	"email"	"character varying(255)"	"NO"		"UNIQUE: uq_users_email | UNIQUE: users_email_key | users_email_not_null"	"uq_users_email | users_email_key"
+"app"	"users"	"employee_id"	"character varying(64)"	"YES"		"UNIQUE: users_employee_id_key"	"users_employee_id_key"
+"app"	"users"	"id"	"bigint"	"NO"	"nextval('app.users_id_seq'::regclass)"	"PRIMARY KEY: users_pkey | users_id_not_null"	"users_pkey"
+"app"	"users"	"is_approved"	"boolean"	"NO"	"false"	"users_is_approved_not_null"	"idx_users_approved"
+"app"	"users"	"is_deleted"	"boolean"	"NO"	"false"	"users_is_deleted_not_null"	
+"app"	"users"	"is_disabled"	"boolean"	"NO"	"false"	"users_is_active_not_null"	"idx_users_disabled"
+"app"	"users"	"name"	"character varying(128)"	"NO"		"users_name_not_null"	
+"app"	"users"	"pin"	"character varying(255)"	"NO"		"users_pin_hash_not_null"	
+"app"	"users"	"reset_code"	"character varying(64)"	"YES"			
+"app"	"users"	"role_id"	"bigint"	"NO"		"FOREIGN KEY: fk_users_role -> FOREIGN KEY (role_id) REFERENCES  | users_role_id_not_null"	"idx_users_role"
+"app"	"users"	"theme"	"character varying(16)"	"NO"	"'light'::character varying"	"users_theme_not_null"	
+"app"	"users"	"updated_at"	"timestamp without time zone"	"YES"			
+
+24-Table_name : 'vehicle_daignostic_actions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_diagnostic_actions"	"auto_run_programs"	"jsonb"	"YES"			"idx_vehicle_diagnostic_actions_auto_run"
+"app"	"vehicle_diagnostic_actions"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_diagnostic_actions"	"description"	"text"	"YES"			
+"app"	"vehicle_diagnostic_actions"	"diagnostic_section_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_diagnostic_actions_diagnostic_section_id_f | vehicle_diagnostic_actions_diagnostic_section_id_not_null"	"idx_vehicle_diagnostic_actions_section"
+"app"	"vehicle_diagnostic_actions"	"ecu_code"	"character varying(50)"	"NO"		"UNIQUE: vehicle_diagnostic_actions_vehicle_id_ecu_code_key | vehicle_diagnostic_actions_ecu_code_not_null"	"idx_vehicle_diagnostic_actions_ecu | idx_vehicle_diagnostic_actions_vehicle_ecu | vehicle_diagnostic_actions_vehicle_id_ecu_code_key"
+"app"	"vehicle_diagnostic_actions"	"ecu_name"	"character varying(100)"	"NO"		"vehicle_diagnostic_actions_ecu_name_not_null"	
+"app"	"vehicle_diagnostic_actions"	"emission"	"character varying(50)"	"YES"			
+"app"	"vehicle_diagnostic_actions"	"folder_id"	"integer"	"YES"		"FOREIGN KEY: vehicle_diagnostic_actions_folder_id_fkey -> FOREI"	
+"app"	"vehicle_diagnostic_actions"	"id"	"integer"	"NO"	"nextval('app.vehicle_diagnostic_actions_id_seq'::regclass)"	"PRIMARY KEY: vehicle_diagnostic_actions_pkey | vehicle_diagnostic_actions_id_not_null"	"vehicle_diagnostic_actions_pkey"
+"app"	"vehicle_diagnostic_actions"	"is_active"	"boolean"	"YES"	"true"		"idx_vehicle_diagnostic_actions_vehicle"
+"app"	"vehicle_diagnostic_actions"	"protocol"	"character varying(20)"	"YES"			
+"app"	"vehicle_diagnostic_actions"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"vehicle_diagnostic_actions"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_diagnostic_actions_vehicle_id_fkey -> FORE | UNIQUE: vehicle_diagnostic_actions_vehicle_id_ecu_code_key | vehicle_diagnostic_actions_vehicle_id_not_null"	"idx_vehicle_diagnostic_actions_ecu | idx_vehicle_diagnostic_actions_vehicle | idx_vehicle_diagnostic_actions_vehicle_ecu | vehicle_diagnostic_actions_vehicle_id_ecu_code_key"
+
+25-Table_name : 'vehicle_diagnostic_sections'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_diagnostic_sections"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_diagnostic_sections"	"description"	"text"	"YES"			
+"app"	"vehicle_diagnostic_sections"	"id"	"integer"	"NO"	"nextval('app.vehicle_diagnostic_sections_id_seq'::regclass)"	"PRIMARY KEY: vehicle_diagnostic_sections_pkey | vehicle_diagnostic_sections_id_not_null"	"vehicle_diagnostic_sections_pkey"
+"app"	"vehicle_diagnostic_sections"	"is_active"	"boolean"	"YES"	"true"		"idx_vehicle_diagnostic_sections_vehicle"
+"app"	"vehicle_diagnostic_sections"	"section_id"	"integer"	"YES"		"FOREIGN KEY: vehicle_diagnostic_sections_section_id_fkey -> FOR"	
+"app"	"vehicle_diagnostic_sections"	"section_name"	"character varying(100)"	"NO"		"vehicle_diagnostic_sections_section_name_not_null"	
+"app"	"vehicle_diagnostic_sections"	"slug"	"character varying(100)"	"NO"		"UNIQUE: vehicle_diagnostic_sections_vehicle_id_slug_key | vehicle_diagnostic_sections_slug_not_null"	"vehicle_diagnostic_sections_vehicle_id_slug_key"
+"app"	"vehicle_diagnostic_sections"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"vehicle_diagnostic_sections"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_diagnostic_sections"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_diagnostic_sections_vehicle_id_fkey -> FOR | UNIQUE: vehicle_diagnostic_sections_vehicle_id_slug_key | vehicle_diagnostic_sections_vehicle_id_not_null"	"idx_vehicle_diagnostic_sections_vehicle | vehicle_diagnostic_sections_vehicle_id_slug_key"
+
+26-Table_name : 'vehicle_health_actions'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_health_actions"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_health_actions"	"execution_class"	"character varying(20)"	"YES"		"CHECK: vehicle_health_actions_execution_class_check (CHECK (exe"	
+"app"	"vehicle_health_actions"	"folder_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_health_actions_folder_id_fkey -> FOREIGN K | UNIQUE: vehicle_health_actions_folder_id_parameter_code_key | vehicle_health_actions_folder_id_not_null"	"idx_vehicle_health_actions_folder | vehicle_health_actions_folder_id_parameter_code_key"
+"app"	"vehicle_health_actions"	"id"	"integer"	"NO"	"nextval('app.vehicle_health_actions_id_seq'::regclass)"	"PRIMARY KEY: vehicle_health_actions_pkey | vehicle_health_actions_id_not_null"	"vehicle_health_actions_pkey"
+"app"	"vehicle_health_actions"	"is_active"	"boolean"	"YES"	"true"		"idx_vehicle_health_actions_folder"
+"app"	"vehicle_health_actions"	"label"	"character varying(200)"	"YES"			
+"app"	"vehicle_health_actions"	"parameter_code"	"character varying(100)"	"NO"		"UNIQUE: vehicle_health_actions_folder_id_parameter_code_key | vehicle_health_actions_parameter_code_not_null"	"vehicle_health_actions_folder_id_parameter_code_key"
+"app"	"vehicle_health_actions"	"sort_order"	"integer"	"YES"	"0"		
+
+27-Table_name : 'vehicle_health_folders'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_health_folders"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_health_folders"	"description"	"text"	"YES"			
+"app"	"vehicle_health_folders"	"execution_class"	"character varying(20)"	"YES"		"CHECK: vehicle_health_folders_execution_class_check (CHECK (exe"	
+"app"	"vehicle_health_folders"	"folder_code"	"character varying(50)"	"NO"		"UNIQUE: vehicle_health_folders_section_id_folder_code_key | vehicle_health_folders_folder_code_not_null"	"vehicle_health_folders_section_id_folder_code_key"
+"app"	"vehicle_health_folders"	"folder_name"	"character varying(100)"	"NO"		"vehicle_health_folders_folder_name_not_null"	
+"app"	"vehicle_health_folders"	"icon"	"character varying(100)"	"YES"	"NULL::character varying"		
+"app"	"vehicle_health_folders"	"id"	"integer"	"NO"	"nextval('app.vehicle_health_folders_id_seq'::regclass)"	"PRIMARY KEY: vehicle_health_folders_pkey | vehicle_health_folders_id_not_null"	"vehicle_health_folders_pkey"
+"app"	"vehicle_health_folders"	"is_active"	"boolean"	"YES"	"true"		"idx_vehicle_health_folders_section"
+"app"	"vehicle_health_folders"	"section_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_health_folders_section_id_fkey -> FOREIGN  | UNIQUE: vehicle_health_folders_section_id_folder_code_key | vehicle_health_folders_section_id_not_null"	"idx_vehicle_health_folders_section | vehicle_health_folders_section_id_folder_code_key"
+"app"	"vehicle_health_folders"	"sort_order"	"integer"	"YES"	"0"		
+
+28-Table_name : 'vehicle_health_map'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_health_map"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_health_map"	"folder_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_health_map_folder_id_fkey -> FOREIGN KEY ( | UNIQUE: vehicle_health_map_health_section_id_folder_id_key | vehicle_health_map_folder_id_not_null"	"vehicle_health_map_health_section_id_folder_id_key"
+"app"	"vehicle_health_map"	"health_section_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_health_map_health_section_id_fkey -> FOREI | UNIQUE: vehicle_health_map_health_section_id_folder_id_key | vehicle_health_map_health_section_id_not_null"	"vehicle_health_map_health_section_id_folder_id_key"
+"app"	"vehicle_health_map"	"id"	"integer"	"NO"	"nextval('app.vehicle_health_map_id_seq'::regclass)"	"PRIMARY KEY: vehicle_health_map_pkey | vehicle_health_map_id_not_null"	"vehicle_health_map_pkey"
+"app"	"vehicle_health_map"	"is_active"	"boolean"	"YES"	"true"		
+"app"	"vehicle_health_map"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_health_map_vehicle_id_fkey -> FOREIGN KEY  | vehicle_health_map_vehicle_id_not_null"	"idx_vehicle_health_map_vehicle"
+
+29-Table_name : 'vehilce_health_sections'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_health_sections"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_health_sections"	"description"	"text"	"YES"			
+"app"	"vehicle_health_sections"	"id"	"integer"	"NO"	"nextval('app.vehicle_health_sections_id_seq'::regclass)"	"PRIMARY KEY: vehicle_health_sections_pkey | vehicle_health_sections_id_not_null"	"vehicle_health_sections_pkey"
+"app"	"vehicle_health_sections"	"is_active"	"boolean"	"YES"	"true"		"idx_vehicle_health_sections_vehicle"
+"app"	"vehicle_health_sections"	"section_name"	"character varying(100)"	"NO"		"vehicle_health_sections_section_name_not_null"	
+"app"	"vehicle_health_sections"	"slug"	"character varying(100)"	"NO"		"UNIQUE: vehicle_health_sections_vehicle_id_slug_key | vehicle_health_sections_slug_not_null"	"vehicle_health_sections_vehicle_id_slug_key"
+"app"	"vehicle_health_sections"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"vehicle_health_sections"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_health_sections"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_health_sections_vehicle_id_fkey -> FOREIGN | UNIQUE: vehicle_health_sections_vehicle_id_slug_key | vehicle_health_sections_vehicle_id_not_null"	"idx_vehicle_health_sections_vehicle | vehicle_health_sections_vehicle_id_slug_key"
+
+30-Table_name : 'vehicle_section_map'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_section_map"	"auto_run_programs"	"jsonb"	"YES"	"'[]'::jsonb"		
+"app"	"vehicle_section_map"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_section_map"	"id"	"integer"	"NO"	"nextval('app.vehicle_section_map_id_seq'::regclass)"	"PRIMARY KEY: vehicle_section_map_pkey | vehicle_section_map_id_not_null"	"vehicle_section_map_pkey"
+"app"	"vehicle_section_map"	"is_active"	"boolean"	"YES"	"true"		
+"app"	"vehicle_section_map"	"section_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_section_map_section_id_fkey -> FOREIGN KEY | UNIQUE: vehicle_section_map_vehicle_id_section_id_key | vehicle_section_map_section_id_not_null"	"vehicle_section_map_vehicle_id_section_id_key"
+"app"	"vehicle_section_map"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_section_map_vehicle_id_fkey -> FOREIGN KEY | UNIQUE: vehicle_section_map_vehicle_id_section_id_key | vehicle_section_map_vehicle_id_not_null"	"vehicle_section_map_vehicle_id_section_id_key"
+
+31-Table_name : 'vehicle_sections'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicle_sections"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_sections"	"description"	"text"	"YES"			
+"app"	"vehicle_sections"	"icon"	"text"	"YES"			
+"app"	"vehicle_sections"	"id"	"integer"	"NO"	"nextval('app.vehicle_sections_id_seq'::regclass)"	"PRIMARY KEY: vehicle_sections_pkey | vehicle_sections_id_not_null"	"vehicle_sections_pkey"
+"app"	"vehicle_sections"	"is_active"	"boolean"	"YES"	"true"		"idx_vehicle_sections_vehicle"
+"app"	"vehicle_sections"	"name"	"character varying(100)"	"NO"		"vehicle_sections_name_not_null"	
+"app"	"vehicle_sections"	"section_type"	"character varying(50)"	"NO"		"CHECK: vehicle_sections_section_type_check (CHECK (section_type | vehicle_sections_section_type_not_null"	"idx_vehicle_sections_vehicle"
+"app"	"vehicle_sections"	"slug"	"character varying(100)"	"NO"		"UNIQUE: vehicle_sections_vehicle_id_slug_key | vehicle_sections_slug_not_null"	"vehicle_sections_vehicle_id_slug_key"
+"app"	"vehicle_sections"	"sort_order"	"integer"	"YES"	"0"		
+"app"	"vehicle_sections"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
+"app"	"vehicle_sections"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: vehicle_sections_vehicle_id_fkey -> FOREIGN KEY (v | UNIQUE: vehicle_sections_vehicle_id_slug_key | vehicle_sections_vehicle_id_not_null"	"idx_vehicle_sections_vehicle | idx_vehicle_sections_vehicle_id | vehicle_sections_vehicle_id_slug_key"
+
+32-Table_name : 'vehicles'
+
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
+"app"	"vehicles"	"category"	"character varying(64)"	"NO"		"vehicles_category_not_null"	
+"app"	"vehicles"	"created_at"	"timestamp without time zone"	"NO"	"CURRENT_TIMESTAMP"	"vehicles_created_at_not_null"	
+"app"	"vehicles"	"deleted_at"	"timestamp without time zone"	"YES"			
+"app"	"vehicles"	"description"	"text"	"YES"			
+"app"	"vehicles"	"id"	"bigint"	"NO"	"nextval('app.vehicles_id_seq'::regclass)"	"PRIMARY KEY: vehicles_pkey | vehicles_id_not_null"	"vehicles_pkey"
+"app"	"vehicles"	"image_filename"	"character varying(255)"	"YES"			
+"app"	"vehicles"	"is_active"	"boolean"	"NO"	"true"	"vehicles_is_active_not_null"	
+"app"	"vehicles"	"is_deleted"	"boolean"	"NO"	"false"	"vehicles_is_deleted_not_null"	
+"app"	"vehicles"	"name"	"character varying(255)"	"NO"		"UNIQUE: uq_vehicles_name | UNIQUE: vehicles_name_key | vehicles_name_not_null"	"uq_vehicles_name | vehicles_name_key"
+"app"	"vehicles"	"vin_pattern"	"character varying(32)"	"YES"			

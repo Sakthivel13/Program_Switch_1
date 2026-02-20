@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – TVS NIRIX{% endblock %}
+
+{% block head %}
+<style>
+  .card-shadow {
+    box-shadow: 0 0.25rem 0.75rem rgba(15,23,42,.15);
+    border-radius: 12px;
+    border: 1px solid rgba(148,163,184,.3);
+    background: #ffffff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  body.dark .card-shadow {
+    background: #1e293b;
+    border-color: rgba(255,255,255,.08);
+  }
+
+  .card-shadow:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0.75rem 1.25rem rgba(15,23,42,.2);
+  }
+
+  .vehicle-card-img {
+    max-height: 150px;
+    object-fit: contain;
+    background: #f8fafc;
+    border-bottom: 1px solid rgba(148,163,184,.3);
+  }
+
+  body.dark .vehicle-card-img {
+    background: #0f172a;
+  }
+
+  .vehicle-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    height: 100%;
+  }
+
+  .vehicle-link:focus-visible {
+    outline: 2px solid #0d6efd;
+    outline-offset: 3px;
+    border-radius: 12px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-11 col-xl-11">
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h5 class="mb-0 fw-bold">Vehicle Selection</h5>
+        <div class="small text-muted">
+          Vehicles you are authorized to access
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         FILTERS
+    ====================================================== -->
+    <div class="card card-shadow p-3 mb-3">
+      <form id="filterForm" method="get" action="{{ url_for('dashboard') }}">
+        <div class="row g-2">
+
+          <!-- VIN FILTER -->
+          <div class="col-12 col-md-4">
+            <label class="form-label small mb-1">VIN Filter</label>
+            <input
+              name="vin"
+              id="vinInput"
+              type="text"
+              class="form-control form-control-sm"
+              value="{{ vin or '' }}"
+              placeholder="VIN (partial allowed)"
+              maxlength="17"
+              autocomplete="off">
+          </div>
+
+          <!-- MODEL SEARCH -->
+          <div class="col-12 col-md-4">
+            <label class="form-label small mb-1">Search Model</label>
+            <input
+              name="search"
+              id="searchInput"
+              type="text"
+              class="form-control form-control-sm"
+              value="{{ search or '' }}"
+              placeholder="Model name"
+              autocomplete="off">
+          </div>
+
+          <!-- CATEGORY -->
+          <div class="col-12 col-md-4">
+            <label class="form-label small mb-1">Category</label>
+            <select
+              name="category"
+              id="categorySelect"
+              class="form-select form-select-sm">
+              <option value="">All Categories</option>
+              {% for cat in categories %}
+                <option value="{{ cat }}"
+                  {% if selected_category == cat %}selected{% endif %}>
+                  {{ cat }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- RESET -->
+          <div class="col-12 d-flex justify-content-end mt-1">
+            <a href="{{ url_for('dashboard') }}"
+               class="btn btn-sm btn-outline-secondary">
+              Reset Filters
+            </a>
+          </div>
+
+        </div>
+      </form>
+    </div>
+
+    <!-- =====================================================
+         VEHICLE GRID
+    ====================================================== -->
+    <div class="row g-3" id="vehicleGrid">
+
+      {% if vehicles %}
+        {% for v in vehicles %}
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+
+          <a href="{{ url_for('tests_page', model_name=v.name) }}"
+             class="vehicle-link">
+
+            <div class="card card-shadow h-100 d-flex flex-column">
+
+              {% if v.image_filename %}
+                <img
+                  src="{{ url_for('vehicle_image', filename=v.image_filename) }}"
+                  class="vehicle-card-img"
+                  alt="{{ v.name }}">
+              {% endif %}
+
+              <div class="card-body p-2 d-flex flex-column">
+
+                <h6 class="text-truncate mb-1" title="{{ v.name }}">
+                  {{ v.name }}
+                </h6>
+
+                {% if v.description %}
+                  <div class="small text-muted text-truncate"
+                       title="{{ v.description }}">
+                    {{ v.description }}
+                  </div>
+                {% endif %}
+
+                {% if v.vin_pattern %}
+                  <div class="small text-muted mt-1">
+                    VIN Pattern:
+                    <strong>{{ v.vin_pattern }}</strong>
+                  </div>
+                {% endif %}
+
+                <div class="btn btn-sm btn-tvs w-100 mt-auto disabled"
+                     style="border-radius:8px; pointer-events:none;">
+                  Open Test Sequence →
+                </div>
+
+              </div>
+            </div>
+
+          </a>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="col-12">
+          <div class="alert alert-warning">
+            No vehicle models are available for your account
+            or match the applied filters.
+          </div>
+        </div>
+      {% endif %}
+
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const form = document.getElementById("filterForm");
+  const vinInput = document.getElementById("vinInput");
+  const searchInput = document.getElementById("searchInput");
+  const categorySelect = document.getElementById("categorySelect");
+
+  if (!form) return;
+
+  /* VIN → uppercase only */
+  if (vinInput) {
+    vinInput.addEventListener("input", () => {
+      vinInput.value = vinInput.value.toUpperCase();
+    });
+  }
+
+  /* Submit on ENTER only */
+  function submitOnEnter(e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    if (vinInput) vinInput.value = vinInput.value.trim();
+    if (searchInput) searchInput.value = searchInput.value.trim();
+
+    form.submit();
+  }
+
+  if (vinInput) vinInput.addEventListener("keydown", submitOnEnter);
+  if (searchInput) searchInput.addEventListener("keydown", submitOnEnter);
+
+  /* Category → auto submit */
+  if (categorySelect) {
+    categorySelect.addEventListener("change", () => {
+      form.submit();
+    });
+  }
+
+});
+</script>
+{% endblock %}

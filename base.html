@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{% block title %}TVS NIRIX{% endblock %}</title>
+
+  <!-- Bootstrap -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet">
+
+  <style>
+    :root {
+      --tvs-blue: #143B68;
+      --tvs-blue-light: #0d6efd;
+      --shadow: 0 4px 16px rgba(0,0,0,0.25);
+
+      --bg-main: #f3f4f6;
+      --text-main: #000;
+      --drawer-bg: #ffffff;
+      --drawer-text: #111;
+    }
+
+    body.dark {
+      --bg-main: #0f172a;
+      --text-main: #e2e8f0;
+      --drawer-bg: #1e293b;
+      --drawer-text: #e2e8f0;
+    }
+
+    body {
+      background: var(--bg-main);
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transition: background 0.25s, color 0.25s;
+    }
+
+    .btn-tvs {
+      background-color: var(--tvs-blue);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+    }
+
+    .btn-tvs:hover {
+      background-color: #0d2c4d;
+      color: #fff;
+    }
+
+    main {
+      padding-top: {% if user %}96px{% else %}40px{% endif %};
+      padding-bottom: 60px;
+    }
+
+    header.header-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: var(--tvs-blue);
+      padding: 8px 16px 6px;
+      box-shadow: var(--shadow);
+      z-index: 1000;
+    }
+
+    footer.footer-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--tvs-blue);
+      color: #fff;
+      padding: 6px 16px;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .top-nav .nav-link {
+      color: #e5f0ff;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .top-nav .nav-link.active {
+      background: var(--tvs-blue-light);
+      color: #fff;
+    }
+
+    .drawer-menu {
+      position: fixed;
+      top: 0; right: -290px;
+      width: 260px;
+      height: 100%;
+      background: var(--drawer-bg);
+      color: var(--drawer-text);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      z-index: 2000;
+      transition: right 0.3s;
+    }
+    .drawer-menu.open { right: 0; }
+
+    .drawer-backdrop {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.45);
+      opacity: 0;
+      visibility: hidden;
+      z-index: 1500;
+      transition: opacity 0.25s;
+    }
+    .drawer-backdrop.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .drawer-header {
+      font-size: 13px;
+      opacity: 0.7;
+      margin-top: 14px;
+    }
+
+    .drawer-item {
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(150,150,150,0.25);
+      cursor: pointer;
+    }
+
+    .hamburger {
+      width: 28px;
+      cursor: pointer;
+    }
+    .hamburger span {
+      display: block;
+      height: 3px;
+      margin: 5px 0;
+      background: #fff;
+      border-radius: 3px;
+    }
+  </style>
+
+  {% block head %}{% endblock %}
+</head>
+
+{% set effective_theme =
+     user.theme if user and user.theme
+     else default_theme %}
+
+<body class="{{ 'dark' if effective_theme == 'dark' else '' }}">
+
+{% if user %}
+<div id="drawer_backdrop" class="drawer-backdrop" onclick="toggleDrawer()"></div>
+
+<div id="drawer_menu" class="drawer-menu">
+
+  <!-- USER INFO -->
+  <div class="drawer-header">User</div>
+  <div class="drawer-item">
+    <strong>{{ user.name }}</strong><br>
+    <small>ID: {{ user.employee_id }}</small><br>
+    <small class="text-muted">{{ user.role|capitalize }}</small>
+  </div>
+
+  <!-- PREFERENCES -->
+  <div class="drawer-header">Preferences</div>
+  <div class="drawer-item" onclick="toggleThemeDB()">
+    Theme:
+    <span id="theme_label">{{ effective_theme|capitalize }}</span>
+  </div>
+
+  <!-- ADMIN / SUPER ADMIN -->
+  {% if user.role in ["admin", "super_admin"] %}
+    <div class="drawer-header">Administration</div>
+
+    <div class="drawer-item"
+         onclick="location.href='{{ url_for("admin.admin_dashboard") }}'">
+      Admin Dashboard
+    </div>
+
+    <div class="drawer-item"
+         onclick="location.href='{{ url_for("admin.admin_users") }}'">
+      User Management
+    </div>
+
+    <div class="drawer-item"
+         onclick="location.href='{{ url_for("admin.admin_vehicles") }}'">
+      Vehicle Management
+    </div>
+
+    <div class="drawer-item"
+         onclick="location.href='{{ url_for("admin.admin_tests") }}'">
+      Test Management
+    </div>
+
+    {% if user.role == "super_admin" %}
+      <div class="drawer-item"
+           onclick="location.href='{{ url_for("admin.admin_roles") }}'">
+        Role Management
+      </div>
+
+      <div class="drawer-item"
+           onclick="location.href='{{ url_for("admin.admin_config") }}'">
+        System Configuration
+      </div>
+    {% endif %}
+
+    <div class="drawer-item"
+         onclick="location.href='{{ url_for("admin.admin_logs") }}'">
+      Logs Management
+    </div>
+  {% endif %}
+
+  <!-- LOGOUT -->
+  <div class="drawer-item text-danger"
+       onclick="location.href='{{ url_for("logout") }}'">
+    Sign Out
+  </div>
+</div>
+
+<header class="header-bar">
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-2">
+      <img src="{{ url_for('vehicle_image', filename='Nirix_Name_Logo.png') }}" style="height:32px;">
+      <span class="text-white fw-bold">NIRIX Diagnostics</span>
+    </div>
+
+    <div class="d-flex align-items-center gap-3">
+      <div class="hamburger" onclick="toggleDrawer()">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN NAV -->
+  <ul class="nav top-nav mt-2">
+    <li class="nav-item">
+      <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}"
+         href="{{ url_for('dashboard') }}">Dashboard</a>
+    </li>
+
+    <li class="nav-item">
+      <a class="nav-link
+        {% if request.endpoint in ['tests_root','tests_page'] %}active{% endif %}"
+        href="{{ url_for('tests_root') }}">
+        Tests
+      </a>
+    </li>
+
+
+    <li class="nav-item">
+      <a class="nav-link {% if request.endpoint=='logs_page' %}active{% endif %}"
+         href="{{ url_for('logs_page') }}">Logs</a>
+    </li>
+
+    <li class="nav-item">
+      <a class="nav-link {% if request.endpoint=='downloads_page' %}active{% endif %}"
+         href="{{ url_for('downloads_page') }}">Downloads</a>
+    </li>
+  </ul>
+</header>
+{% endif %}
+
+<main class="container-fluid">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer-bar">
+  © 2025 TVS NIRIX – Internal Diagnostic Tool
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+{% if user %}
+<script>
+function toggleDrawer() {
+  document.getElementById("drawer_menu").classList.toggle("open");
+  document.getElementById("drawer_backdrop").classList.toggle("show");
+}
+
+async function toggleThemeDB() {
+  const isDark = document.body.classList.contains("dark");
+  const newTheme = isDark ? "light" : "dark";
+
+  document.body.classList.toggle("dark");
+  document.getElementById("theme_label").textContent =
+    newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+
+  await fetch("/api/set_theme", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ theme: newTheme })
+  });
+}
+</script>
+{% endif %}
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
