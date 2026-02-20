@@ -3,10 +3,10 @@
 DIAGNOSTIC EXECUTION SERVICE (PRODUCTION – DB AUTHORITATIVE)
 FULLY INTEGRATED WITH UPDATED LOADER AND RUNNER
 
-Version: 4.4.0
-Last Updated: 2026-02-17
+Version: 4.5.0
+Last Updated: 2026-02-20
 
-FIXES IN v4.4.0
+FIXES IN v4.5.0
 ────────────────
 - FIX-60: Support for ECU-level auto-run programs (from ecu_tests.json)
 - FIX-61: Enhanced ECU status persistence for colored dots in UI
@@ -14,6 +14,11 @@ FIXES IN v4.4.0
 - FIX-63: Manual VIN input integration with session management
 - FIX-64: Stream value persistence with proper ON CONFLICT
 - FIX-65: ECU active status tracking for multiple ECUs
+- FIX-66: Per-login auto-run session tracking (one session per login)
+- FIX-67: Enhanced error handling for stream value persistence
+- FIX-68: Proper generator function validation
+- FIX-69: Session heartbeat mechanism for stale detection
+- FIX-70: Improved VIN display from session data
 """
 
 from __future__ import annotations
@@ -24,8 +29,9 @@ import json
 import time
 import traceback
 import inspect
+import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Callable, Iterable, Tuple
+from typing import Dict, Any, Optional, List, Callable, Iterable, Tuple, Union
 
 # =============================================================================
 # DATABASE IMPORTS
@@ -57,6 +63,7 @@ from diagnostics.loader import (
     ModuleLoadError,
     FunctionNotFoundError,
     safe_name,
+    vehicle_exists,
 )
 
 # =============================================================================
@@ -82,6 +89,7 @@ from diagnostics.runner import (
     get_batch_status,
     cancel_batch,
     get_ecu_status_from_session,  # FIX-61: Get ECU status for colored dots
+    send_task_heartbeat,
     # Auto-run session support
     create_auto_run_session,
     start_auto_run_session,
@@ -99,6 +107,10 @@ from diagnostics.runner import (
     TaskStatus,
     ExecutionMode,
     BatchExecutionConfig,
+    # Exceptions
+    StreamNotGeneratorError,
+    # Utilities
+    _is_generator_function,
 )
 
 # =============================================================================
@@ -106,10 +118,10 @@ from diagnostics.runner import (
 # =============================================================================
 
 try:
-    from diagnostics.can_utils import get_config_value, set_config_value
+    from diagnostics.can_utils import get_config_value, set_config_value, get_can_config
     CAN_UTILS_AVAILABLE = True
 except ImportError:
-    get_config_value = set_config_value = None
+    get_config_value = set_config_value = get_can_config = None
     CAN_UTILS_AVAILABLE = False
 
 # =============================================================================
@@ -149,6 +161,10 @@ FALLBACK_MANUAL_INPUT = "manual_input"
 FALLBACK_WARN_AND_CONTINUE = "warn_and_continue"
 FALLBACK_BLOCK = "block"
 FALLBACK_NONE = "none"
+
+# Session timeouts
+SESSION_MAX_IDLE_SEC = 7200  # 2 hours
+SESSION_HEARTBEAT_INTERVAL_SEC = 300  # 5 minutes
 
 # =============================================================================
 # LOGGING
@@ -236,6 +252,11 @@ class AutoRunError(Exception):
         self.fallback_action = fallback_action
 
 
+class SessionExistsError(Exception):
+    """Raised when trying to create a duplicate auto-run session."""
+    pass
+
+
 # =============================================================================
 # SMALL HELPERS (AUTO-RUN PERSISTENCE HARDENING)
 # =============================================================================
@@ -310,6 +331,7 @@ def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str
     - result["result_data"]["details"] as dict {"BMS": true/false}
     - a raw list in result["result_data"]
     - single ECU result {"is_active": true, "ecu_code": "BMS"}
+    - multiple ECU results in a dict {"BMS": true, "ECM": false}
     """
     if not isinstance(result_dict, dict):
         return []
@@ -324,6 +346,20 @@ def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str
             "error_count": 0 if result_dict.get("is_active") else 1,
             "last_response": result_dict.get("last_response"),
         }]
+
+    # Check for multiple ECU results in dict form {"BMS": true, "ECM": false}
+    if all(isinstance(k, str) and isinstance(v, (bool, int)) for k, v in result_dict.items()):
+        result = []
+        for ecu_code, is_active in result_dict.items():
+            if not ecu_code.startswith("_"):  # Skip internal keys
+                result.append({
+                    "ecu_code": ecu_code,
+                    "is_active": bool(is_active),
+                    "error_count": 0 if is_active else 1,
+                    "last_response": None,
+                })
+        if result:
+            return result
 
     # top-level keys
     candidates.append(result_dict.get("ecu_statuses"))
@@ -343,6 +379,20 @@ def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str
                 "last_response": rd.get("last_response"),
             }]
 
+        # Check for multiple ECU results in result_data dict
+        if all(isinstance(k, str) and isinstance(v, (bool, int)) for k, v in rd.items()):
+            result = []
+            for ecu_code, is_active in rd.items():
+                if not ecu_code.startswith("_"):
+                    result.append({
+                        "ecu_code": ecu_code,
+                        "is_active": bool(is_active),
+                        "error_count": 0 if is_active else 1,
+                        "last_response": None,
+                    })
+            if result:
+                return result
+
         candidates.append(rd.get("ecu_statuses"))
         candidates.append(rd.get("ecus"))
         candidates.append(rd.get("details"))
@@ -358,6 +408,20 @@ def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str
                     "last_response": data.get("last_response"),
                 }]
 
+            # Check for multiple ECU results in data dict
+            if all(isinstance(k, str) and isinstance(v, (bool, int)) for k, v in data.items()):
+                result = []
+                for ecu_code, is_active in data.items():
+                    if not ecu_code.startswith("_"):
+                        result.append({
+                            "ecu_code": ecu_code,
+                            "is_active": bool(is_active),
+                            "error_count": 0 if is_active else 1,
+                            "last_response": None,
+                        })
+                if result:
+                    return result
+
             candidates.append(data.get("ecu_statuses"))
             candidates.append(data.get("ecus"))
             candidates.append(data.get("details"))
@@ -368,7 +432,15 @@ def _extract_ecu_statuses_anywhere(result_dict: Dict[str, Any]) -> List[Dict[str
             out: List[Dict[str, Any]] = []
             for item in c:
                 if isinstance(item, dict):
-                    out.append(item)
+                    # Handle items that might have different key names
+                    ecu_code = item.get("ecu_code") or item.get("ecu") or item.get("name")
+                    if ecu_code:
+                        out.append({
+                            "ecu_code": ecu_code,
+                            "is_active": bool(item.get("is_active", item.get("active", False))),
+                            "error_count": item.get("error_count", 0 if item.get("is_active") else 1),
+                            "last_response": item.get("last_response"),
+                        })
             if out:
                 return out
 
@@ -818,6 +890,11 @@ def get_can_configuration() -> Dict[str, Any]:
         return default_config
 
     try:
+        # Try to use get_can_config if available
+        if get_can_config is not None:
+            return get_can_config()
+        
+        # Fallback to individual values
         interface = get_config_value("can_interface")
         bitrate = get_config_value("can_bitrate")
 
@@ -926,7 +1003,8 @@ def _ensure_auto_run_session_row(
     vehicle_id: int,
     vehicle_name: str,
     user_id: int,
-    section_type: str,
+    user_login_id: str = None,  # FIX-66: Add login ID
+    section_type: str = "diagnostics",
     status: str = "running",
 ) -> None:
     """
@@ -939,14 +1017,21 @@ def _ensure_auto_run_session_row(
     try:
         execute("""
             INSERT INTO app.auto_run_sessions
-                (session_id, vehicle_id, user_id, vehicle_name, section_type, status, started_at)
+                (session_id, vehicle_id, user_id, user_login_id, vehicle_name, 
+                 section_type, status, started_at, last_accessed, updated_at)
             VALUES
-                (:sid, :vid, :uid, :vname, :section, :status, CURRENT_TIMESTAMP)
-            ON CONFLICT (session_id) DO NOTHING
+                (:sid, :vid, :uid, :login_id, :vname, :section, :status, 
+                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (session_id) DO UPDATE SET
+                user_login_id = COALESCE(EXCLUDED.user_login_id, app.auto_run_sessions.user_login_id),
+                status = EXCLUDED.status,
+                last_accessed = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
         """, {
             "sid": session_id,
             "vid": vehicle_id,
             "uid": user_id,
+            "login_id": user_login_id,
             "vname": vehicle_name,
             "section": section_type,
             "status": status,
@@ -964,9 +1049,11 @@ def _mark_auto_run_session_status(session_id: str, status: str) -> None:
             UPDATE app.auto_run_sessions
                SET status = :status,
                    ended_at = CASE
-                                WHEN :status IN ('completed', 'stopped', 'failed') THEN CURRENT_TIMESTAMP
+                                WHEN :status IN ('completed', 'stopped', 'failed', 'expired') 
+                                THEN CURRENT_TIMESTAMP
                                 ELSE ended_at
-                              END
+                              END,
+                   updated_at = CURRENT_TIMESTAMP
              WHERE session_id = :sid
         """, {"sid": session_id, "status": status})
     except Exception as e:
@@ -980,7 +1067,8 @@ def _update_session_programs_config(session_id: str, programs_config: List[Dict[
     try:
         execute("""
             UPDATE app.auto_run_sessions
-               SET programs_config = CAST(:cfg AS jsonb)
+               SET programs_config = CAST(:cfg AS jsonb),
+                   updated_at = CURRENT_TIMESTAMP
              WHERE session_id = :sid
         """, {"sid": session_id, "cfg": json.dumps(programs_config)})
     except Exception as e:
@@ -997,7 +1085,10 @@ def _update_session_vin(session_id: str, vin_value: str, source: str) -> None:
     try:
         execute("""
             UPDATE app.auto_run_sessions
-               SET vin = :vin, vin_source = :src, vin_input_needed = TRUE
+               SET vin = :vin, 
+                   vin_source = :src, 
+                   vin_input_needed = FALSE,
+                   updated_at = CURRENT_TIMESTAMP
              WHERE session_id = :sid
         """, {"sid": session_id, "vin": vin_value, "src": source})
     except Exception as e:
@@ -1011,11 +1102,51 @@ def _set_vin_input_needed(session_id: str, needed: bool = True) -> None:
     try:
         execute("""
             UPDATE app.auto_run_sessions
-               SET vin_input_needed = :needed
+               SET vin_input_needed = :needed,
+                   updated_at = CURRENT_TIMESTAMP
              WHERE session_id = :sid
         """, {"sid": session_id, "needed": needed})
     except Exception as e:
         _log_warn(f"Failed to set vin_input_needed for session {session_id}: {e}")
+
+
+def _update_session_heartbeat(session_id: str) -> None:
+    """Update last_accessed timestamp for a session (heartbeat)."""
+    if not DATABASE_AVAILABLE or execute is None:
+        return
+    try:
+        execute("""
+            UPDATE app.auto_run_sessions
+               SET last_accessed = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE session_id = :sid
+        """, {"sid": session_id})
+    except Exception as e:
+        _log_warn(f"Failed to update session heartbeat for {session_id}: {e}")
+
+
+def _check_existing_session(user_id: int, user_login_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Check if there's an existing running session for this user login.
+    Returns session info if found, None otherwise.
+    """
+    if not DATABASE_AVAILABLE or query_one is None:
+        return None
+    
+    try:
+        return query_one("""
+            SELECT session_id, status, started_at, vehicle_name
+            FROM app.auto_run_sessions
+            WHERE user_id = :uid
+              AND user_login_id = :login_id
+              AND status IN ('running', 'started')
+              AND started_at > NOW() - INTERVAL '2 hours'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, {"uid": user_id, "login_id": user_login_id})
+    except Exception as e:
+        _log_warn(f"Error checking existing session: {e}")
+        return None
 
 
 # FIX-64: Enhanced stream value persistence with proper ON CONFLICT
@@ -1170,14 +1301,14 @@ def create_auto_run_result_persister(
                 (session_id, vehicle_id, user_id, program_id,
                  program_name, program_type, status, passed,
                  result_value, result_data, error_message,
-                 manual_input, log_as_vin, created_at, updated_at)
+                 manual_input, log_as_vin, source, created_at, updated_at)
                 VALUES
                 (:sid, :vid, :uid, :pid,
                  :pname, :ptype, :status, :passed,
                  :rvalue,
                  CASE WHEN :rdata IS NULL THEN NULL ELSE CAST(:rdata AS jsonb) END,
                  :error,
-                 :manual, :vin_flag, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                 :manual, :vin_flag, :source, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT (session_id, program_id) DO UPDATE SET
                     status        = EXCLUDED.status,
                     passed        = EXCLUDED.passed,
@@ -1185,6 +1316,7 @@ def create_auto_run_result_persister(
                     result_data   = EXCLUDED.result_data,
                     error_message = EXCLUDED.error_message,
                     manual_input  = EXCLUDED.manual_input,
+                    source        = EXCLUDED.source,
                     updated_at    = CURRENT_TIMESTAMP
             """, {
                 "sid": sid,
@@ -1201,6 +1333,7 @@ def create_auto_run_result_persister(
                 "error": result.get("error_message"),
                 "manual": result.get("manual_input", False),
                 "vin_flag": result.get("log_as_vin", False),
+                "source": result.get("source", "section"),
             })
 
             _log_debug(f"Persisted auto-run result: {program_id} session={sid}")
@@ -1221,6 +1354,7 @@ def _resolve_auto_run_function(
 ) -> Optional[Callable]:
     """
     Resolve the callable for an auto-run program.
+    Validates that stream programs are generator functions.
     """
     module_name = program.get("module_name", "")
     function_name = program.get("function_name", "")
@@ -1263,9 +1397,16 @@ def _resolve_auto_run_function(
             try:
                 fn = load_function_from_path(module_path, function_name)
                 
-                # Check if function is generator for stream programs
-                if program_type == "stream" and not inspect.isgeneratorfunction(fn):
-                    _log_error(f"Program {program_id} is type 'stream' but function {function_name} is not a generator!")
+                # Validate generator for stream programs (FIX-68)
+                if program_type == "stream":
+                    if not _is_generator_function(fn):
+                        _log_error(
+                            f"Program {program_id} is type 'stream' but function {function_name} "
+                            f"in {module_path} is not a generator! This will fail at runtime."
+                        )
+                        # Return None to skip this program
+                        return None
+                    _log_info(f"Validated stream generator: {function_name}")
                 
                 _log_info(f"Resolved auto-run function: {function_name} from {module_path}")
                 return fn
@@ -1295,6 +1436,7 @@ def start_auto_run(
     user_role: str,
     vehicle_name: str,
     section_type: str,
+    user_login_id: str = None,  # FIX-66: Add login ID for per-login tracking
     on_progress: Optional[Callable[[str, int, str], None]] = None,
     on_single_result: Optional[Callable] = None,
     on_stream_data: Optional[Callable] = None,
@@ -1304,11 +1446,24 @@ def start_auto_run(
     Start an auto-run session for a vehicle section.
     
     FIX-60: Now also loads ECU-specific auto-run programs from ecu_tests.json
+    FIX-66: Ensures only one auto-run session per user login
     """
     _log_info(
         f"Starting auto-run: vehicle={vehicle_name}, "
-        f"section={section_type}, user={user_id}"
+        f"section={section_type}, user={user_id}, login={user_login_id}"
     )
+
+    # FIX-66: Check for existing session for this login
+    if user_login_id and DATABASE_AVAILABLE:
+        existing = _check_existing_session(user_id, user_login_id)
+        if existing:
+            _log_info(f"Found existing auto-run session for login {user_login_id}: {existing['session_id']}")
+            return {
+                "ok": False,
+                "error": "AUTO_RUN_ALREADY_ACTIVE",
+                "session_id": existing["session_id"],
+                "message": "Auto-run already running for this login session"
+            }
 
     vehicle = get_vehicle_by_name(vehicle_name)
     if not vehicle:
@@ -1467,6 +1622,7 @@ def start_auto_run(
         vehicle_id=vehicle_id,
         vehicle_name=vehicle_name,
         user_id=user_id,
+        user_login_id=user_login_id,  # FIX-66: Store login ID
         section_type=section_type,
         status="running",
     )
@@ -1654,9 +1810,9 @@ def start_auto_run(
             spec.ctx.stream_callback = make_stream_cb(spec.program_id)
             _log_info(f"  Stream callback set for {spec.program_id}: {spec.ctx.stream_callback is not None}")
             
-            # Verify function is generator
-            if not inspect.isgeneratorfunction(spec.fn):
-                _log_error(f"  WARNING: {spec.program_id} is type 'stream' but function is not a generator!")
+            # Verify function is generator (already validated in _resolve_auto_run_function)
+            if not _is_generator_function(spec.fn):
+                _log_error(f"  CRITICAL: {spec.program_id} is type 'stream' but function is not a generator!")
 
     _log_info(f"Stream callbacks set for {stream_count} programs")
 
@@ -1701,6 +1857,7 @@ def start_auto_run(
 def get_auto_run_status(session_id: str) -> Dict[str, Any]:
     """
     Get the current status of an auto-run session.
+    FIX-70: Enhanced VIN display from session data
     """
     session_data = get_auto_run_session(session_id)
     if not session_data:
@@ -1720,6 +1877,7 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
     vin = session_data.get("vin")
     vin_source = session_data.get("vin_source", "none")
 
+    # FIX-70: Update result status based on session VIN
     for pid, result in results.items():
         is_required = result.get("is_required", True)
         passed = result.get("passed", False)
@@ -1731,9 +1889,10 @@ def get_auto_run_status(session_id: str) -> Dict[str, Any]:
         if log_as_vin and vin and vin_source in ("auto", "manual"):
             passed = True
             status = "manual" if vin_source == "manual" else "success"
-            # Update result in session
+            # Update result in session data (not persistent)
             result["passed"] = True
             result["status"] = status
+            result["result_value"] = vin
         
         if is_required and not passed:
             if fallback == FALLBACK_MANUAL_INPUT and status != "manual":
@@ -1836,6 +1995,16 @@ def stop_auto_run(session_id: str) -> Dict[str, Any]:
     else:
         _mark_auto_run_session_status(session_id, "failed")
     return result
+
+
+def send_session_heartbeat(session_id: str) -> bool:
+    """Send heartbeat for an auto-run session."""
+    try:
+        _update_session_heartbeat(session_id)
+        return True
+    except Exception as e:
+        _log_warn(f"Failed to send session heartbeat: {e}")
+        return False
 
 
 # =============================================================================
@@ -2873,6 +3042,24 @@ def service_cleanup() -> Dict[str, int]:
     tasks_removed = purge_completed_tasks()
     sessions_removed = cleanup_auto_run_sessions()
 
+    # Clean up stale auto-run sessions in DB
+    if DATABASE_AVAILABLE and execute is not None:
+        try:
+            # Mark sessions as expired if no heartbeat for 2 hours
+            expired = execute("""
+                UPDATE app.auto_run_sessions
+                SET status = 'expired', 
+                    ended_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE status IN ('running', 'started')
+                  AND last_accessed < NOW() - INTERVAL '2 hours'
+                RETURNING session_id
+            """)
+            if expired and expired.rowcount > 0:
+                _log_info(f"Expired {expired.rowcount} stale auto-run sessions")
+        except Exception as e:
+            _log_warn(f"Failed to expire stale sessions: {e}")
+
     _log_info(f"Cleanup: {tasks_removed} tasks, {sessions_removed} sessions removed")
     return {"tasks_removed": tasks_removed, "sessions_removed": sessions_removed}
 
@@ -2882,6 +3069,19 @@ def get_service_stats() -> Dict[str, Any]:
     stats = get_runner_stats()
     stats["database_available"] = DATABASE_AVAILABLE
     stats["can_utils_available"] = CAN_UTILS_AVAILABLE
+    
+    # Add session stats
+    if DATABASE_AVAILABLE and query_one is not None:
+        try:
+            active_sessions = query_one("""
+                SELECT COUNT(*) as count
+                FROM app.auto_run_sessions
+                WHERE status IN ('running', 'started')
+            """)
+            stats["active_sessions"] = active_sessions["count"] if active_sessions else 0
+        except Exception:
+            stats["active_sessions"] = 0
+    
     return stats
 
 
@@ -2890,7 +3090,7 @@ def get_service_stats() -> Dict[str, Any]:
 # =============================================================================
 
 def init_service():
-    _log_info("Diagnostic service v4.4.0 initialized")
+    _log_info("Diagnostic service v4.5.0 initialized")
 
     if not DATABASE_AVAILABLE:
         _log_warn("Database not available — limited functionality")
@@ -2913,6 +3113,7 @@ __all__ = [
     "ValidationError",
     "ServiceExecutionError",
     "AutoRunError",
+    "SessionExistsError",
 
     # Main execution
     "run_test",
@@ -2923,6 +3124,7 @@ __all__ = [
     "get_auto_run_status",
     "submit_auto_run_vin",
     "stop_auto_run",
+    "send_session_heartbeat",
 
     # Auto-run (legacy compat)
     "run_auto_programs",
