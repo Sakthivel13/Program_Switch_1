@@ -1,14 +1,16 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.1.0",
   "vehicle": "TVS iQube ST",
   "ecus": [
     {
       "ecu_code": "BMS",
-      "ecu_name": "BMS",
-      "description": "Battery Management System ECU",
+      "ecu_name": "Battery Management System",
+      "description": "Controls and monitors the traction battery pack",
       "protocol": "UDS",
-      "emission": "OBDII",
-      "icon": "icons/microchip.svg",
+      "emission": "None",
+      "icon": "fa-battery-full",
+      "is_active": true,
+      "sort_order": 1,
       "auto_run_programs": [
         {
           "program_id": "AUTO_ECU_ACTIVE_CHECK",
@@ -18,7 +20,7 @@
           "function_name": "check_ecu_active",
           "execution_mode": "single",
           "display_type": "status",
-          "display_label": "ECU Status",
+          "display_label": "BMS Status",
           "display_unit": null,
           "display_pages": ["ecu"],
           "ecu_targets": ["BMS"],
@@ -36,16 +38,34 @@
           "is_required": true,
           "timeout_sec": 10,
           "sort_order": 1
+        },
+        {
+          "program_id": "AUTO_CELL_BALANCE",
+          "program_name": "Cell Balancing Status",
+          "program_type": "single",
+          "module_name": "bms_cells",
+          "function_name": "check_cell_balance",
+          "execution_mode": "single",
+          "display_type": "text",
+          "display_label": "Cell Balance",
+          "display_unit": null,
+          "display_pages": ["ecu"],
+          "ecu_targets": ["BMS"],
+          "output_limits": [],
+          "fallback_action": "none",
+          "fallback_input": null,
+          "log_as_vin": false,
+          "is_required": false,
+          "timeout_sec": 15,
+          "sort_order": 2
         }
       ],
-      "is_active": true,
-      "sort_order": 1,
       "parameters": [
         {
           "parameter_code": "LIVE_PARAMETER",
           "label": "Live Parameters",
-          "description": "Streaming signals like Voltage, Temperature etc.",
-          "icon": "icons/wave-square.svg",
+          "description": "Real-time battery parameters including voltage, current, temperature",
+          "icon": "fa-wave-square",
           "execution_class": "STREAM",
           "sort_order": 1,
           "is_active": true
@@ -53,10 +73,182 @@
         {
           "parameter_code": "WRITE_DATA_IDENTIFIER",
           "label": "Write Data Identifier",
-          "description": "Writing data into the ECU ex: VIN, MAC, Date, Time etc.",
-          "icon": "icons/edit.svg",
+          "description": "Write configuration data to BMS (VIN, manufacturing date, etc.)",
+          "icon": "fa-edit",
           "execution_class": "SINGLE",
           "sort_order": 2,
+          "is_active": true
+        },
+        {
+          "parameter_code": "DTC",
+          "label": "Diagnostic Trouble Codes",
+          "description": "Read and clear BMS fault codes",
+          "icon": "fa-exclamation-triangle",
+          "execution_class": "SINGLE",
+          "sort_order": 3,
+          "is_active": true
+        },
+        {
+          "parameter_code": "CELL_VOLTAGES",
+          "label": "Individual Cell Voltages",
+          "description": "Monitor voltage of each battery cell",
+          "icon": "fa-chart-bar",
+          "execution_class": "STREAM",
+          "sort_order": 4,
+          "is_active": true
+        },
+        {
+          "parameter_code": "TEMPERATURES",
+          "label": "Temperature Sensors",
+          "description": "Battery pack temperature monitoring",
+          "icon": "fa-thermometer-half",
+          "execution_class": "STREAM",
+          "sort_order": 5,
+          "is_active": true
+        }
+      ]
+    },
+    {
+      "ecu_code": "VCU",
+      "ecu_name": "Vehicle Control Unit",
+      "description": "Central vehicle control and coordination",
+      "protocol": "UDS",
+      "emission": "None",
+      "icon": "fa-microchip",
+      "is_active": true,
+      "sort_order": 2,
+      "auto_run_programs": [
+        {
+          "program_id": "AUTO_VCU_ACTIVE",
+          "program_name": "VCU Active Check",
+          "program_type": "single",
+          "module_name": "ecu_active_check",
+          "function_name": "check_ecu_active",
+          "execution_mode": "single",
+          "display_type": "status",
+          "display_label": "VCU Status",
+          "display_unit": null,
+          "display_pages": ["ecu"],
+          "ecu_targets": ["VCU"],
+          "output_limits": [
+            { 
+              "signal": "is_active", 
+              "lsl": 1, 
+              "usl": 1, 
+              "unit": null 
+            }
+          ],
+          "fallback_action": "block",
+          "fallback_input": null,
+          "log_as_vin": false,
+          "is_required": true,
+          "timeout_sec": 10,
+          "sort_order": 1
+        }
+      ],
+      "parameters": [
+        {
+          "parameter_code": "VEHICLE_STATUS",
+          "label": "Vehicle Status",
+          "description": "Overall vehicle operational status",
+          "icon": "fa-car",
+          "execution_class": "STREAM",
+          "sort_order": 1,
+          "is_active": true
+        },
+        {
+          "parameter_code": "SPEED_SENSORS",
+          "label": "Speed Sensors",
+          "description": "Wheel speed and vehicle velocity",
+          "icon": "fa-tachometer-alt",
+          "execution_class": "STREAM",
+          "sort_order": 2,
+          "is_active": true
+        },
+        {
+          "parameter_code": "THROTTLE",
+          "label": "Throttle Position",
+          "description": "Accelerator pedal position sensor",
+          "icon": "fa-gauge-high",
+          "execution_class": "STREAM",
+          "sort_order": 3,
+          "is_active": true
+        },
+        {
+          "parameter_code": "BRAKE",
+          "label": "Brake Sensors",
+          "description": "Brake pedal and regenerative braking",
+          "icon": "fa-brake-warning",
+          "execution_class": "SINGLE",
+          "sort_order": 4,
+          "is_active": true
+        }
+      ]
+    },
+    {
+      "ecu_code": "MCU",
+      "ecu_name": "Motor Control Unit",
+      "description": "Electric motor drive and control",
+      "protocol": "CAN",
+      "emission": "None",
+      "icon": "fa-bolt",
+      "is_active": true,
+      "sort_order": 3,
+      "auto_run_programs": [
+        {
+          "program_id": "AUTO_MCU_ACTIVE",
+          "program_name": "MCU Active Check",
+          "program_type": "single",
+          "module_name": "ecu_active_check",
+          "function_name": "check_ecu_active",
+          "execution_mode": "single",
+          "display_type": "status",
+          "display_label": "MCU Status",
+          "display_unit": null,
+          "display_pages": ["ecu"],
+          "ecu_targets": ["MCU"],
+          "output_limits": [
+            { 
+              "signal": "is_active", 
+              "lsl": 1, 
+              "usl": 1, 
+              "unit": null 
+            }
+          ],
+          "fallback_action": "warn_and_continue",
+          "fallback_input": null,
+          "log_as_vin": false,
+          "is_required": true,
+          "timeout_sec": 10,
+          "sort_order": 1
+        }
+      ],
+      "parameters": [
+        {
+          "parameter_code": "MOTOR_DATA",
+          "label": "Motor Parameters",
+          "description": "RPM, torque, power, temperature",
+          "icon": "fa-gauge-high",
+          "execution_class": "STREAM",
+          "sort_order": 1,
+          "is_active": true
+        },
+        {
+          "parameter_code": "INVERTER",
+          "label": "Inverter Status",
+          "description": "Inverter temperature and switching frequency",
+          "icon": "fa-bolt",
+          "execution_class": "STREAM",
+          "sort_order": 2,
+          "is_active": true
+        },
+        {
+          "parameter_code": "DTC",
+          "label": "Motor Fault Codes",
+          "description": "Read and clear motor controller faults",
+          "icon": "fa-exclamation-triangle",
+          "execution_class": "SINGLE",
+          "sort_order": 3,
           "is_active": true
         }
       ]
