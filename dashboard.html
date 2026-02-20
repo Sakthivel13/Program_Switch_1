@@ -1141,4 +1141,224 @@ async function loadRecentActivity() {
             <div class="activity-title">${activity.title}</div>
             <div class="activity-meta">
               <span><i class="far fa-clock me-1"></i>${activity.time}</span>
-              <span><i class="fas fa-car me-1"></i>${activity.vehicle}</span
+              <span><i class="fas fa-car me-1"></i>${activity.vehicle}</span>
+              ${activity.status ? `<span class="activity-badge">${activity.status}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      `).join('');
+      
+      if (activityCount) {
+        activityCount.textContent = data.activities.length;
+      }
+    } else {
+      activityList.innerHTML = `
+        <div class="text-center text-muted py-3">
+          <i class="fas fa-history me-2"></i>No recent activity
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Failed to load recent activity:', error);
+    activityList.innerHTML = `
+      <div class="text-center text-muted py-3">
+        <i class="fas fa-exclamation-triangle me-2"></i>Failed to load activity
+      </div>
+    `;
+  }
+}
+
+// ===========================================================================
+// TEST COUNTS PER VEHICLE
+// ===========================================================================
+
+async function initializeTestCounts() {
+  const testCountElements = document.querySelectorAll('[data-test-count]');
+  
+  for (const el of testCountElements) {
+    const vehicleId = el.getAttribute('data-test-count');
+    try {
+      const response = await fetch(`/api/vehicle/${vehicleId}/test_count`);
+      const data = await response.json();
+      el.textContent = data.count || 0;
+    } catch (error) {
+      console.error(`Failed to load test count for vehicle ${vehicleId}:`, error);
+      el.textContent = 'N/A';
+    }
+  }
+}
+
+// ===========================================================================
+// SORTING FUNCTIONALITY
+// ===========================================================================
+
+function initializeSorting() {
+  const sortLinks = document.querySelectorAll('.dropdown-item[data-sort]');
+  
+  sortLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const sortBy = link.dataset.sort;
+      sortVehicles(sortBy);
+    });
+  });
+}
+
+function sortVehicles(by) {
+  const grid = document.getElementById('vehicleGrid');
+  const cards = Array.from(grid.children);
+  
+  cards.sort((a, b) => {
+    const aVal = a.dataset[`vehicleSort${by.charAt(0).toUpperCase() + by.slice(1)}`];
+    const bVal = b.dataset[`vehicleSort${by.charAt(0).toUpperCase() + by.slice(1)}`];
+    
+    if (by === 'recent') {
+      // For recent, we'd need last accessed time
+      return 0;
+    }
+    
+    return aVal.localeCompare(bVal);
+  });
+  
+  // Reappend in sorted order
+  cards.forEach(card => grid.appendChild(card));
+}
+
+// ===========================================================================
+// VEHICLE INFO MODAL
+// ===========================================================================
+
+async function showVehicleInfo(vehicleId) {
+  const modal = new bootstrap.Modal(document.getElementById('vehicleInfoModal'));
+  const content = document.getElementById('vehicleInfoContent');
+  
+  content.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  modal.show();
+  
+  try {
+    const response = await fetch(`/api/vehicle/${vehicleId}/info`);
+    const data = await response.json();
+    
+    content.innerHTML = `
+      <div class="vehicle-info">
+        <div class="text-center mb-3">
+          <img src="${data.image || '/static/img/default-vehicle.png'}" 
+               alt="${data.name}"
+               style="max-height: 120px; border-radius: 8px;">
+        </div>
+        
+        <table class="table table-sm">
+          <tr>
+            <th>Name:</th>
+            <td>${data.name}</td>
+          </tr>
+          <tr>
+            <th>Category:</th>
+            <td>${data.category}</td>
+          </tr>
+          <tr>
+            <th>Description:</th>
+            <td>${data.description || 'N/A'}</td>
+          </tr>
+          <tr>
+            <th>VIN Pattern:</th>
+            <td><code>${data.vin_pattern || 'N/A'}</code></td>
+          </tr>
+          <tr>
+            <th>Total Tests:</th>
+            <td>${data.test_count || 0}</td>
+          </tr>
+          <tr>
+            <th>Last Accessed:</th>
+            <td>${data.last_accessed || 'Never'}</td>
+          </tr>
+        </table>
+      </div>
+    `;
+  } catch (error) {
+    content.innerHTML = '<div class="alert alert-danger">Failed to load vehicle information</div>';
+  }
+}
+
+// ===========================================================================
+// QUICK ACTIONS
+// ===========================================================================
+
+function runAllDiagnostics() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById('quickActionsModal'));
+  if (modal) modal.hide();
+  
+  // Implement run all diagnostics
+  showToast('Starting diagnostics on all vehicles...', 'info');
+}
+
+function viewReports() {
+  window.location.href = '/logs';
+}
+
+function exportData() {
+  window.location.href = '/api/export/vehicles';
+}
+
+// ===========================================================================
+// TOAST NOTIFICATIONS (reusing from base.html)
+// ===========================================================================
+
+function showToast(message, type = 'info') {
+  if (window.showToast) {
+    window.showToast(message, type);
+  } else {
+    console.log(`[${type}] ${message}`);
+  }
+}
+
+// ===========================================================================
+// KEYBOARD SHORTCUTS (dashboard specific)
+// ===========================================================================
+
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + F -> focus filter
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    document.getElementById('vinInput')?.focus();
+  }
+  
+  // Ctrl/Cmd + R -> reset filters
+  if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+    if (!e.shiftKey) {
+      e.preventDefault();
+      clearFilters();
+    }
+  }
+  
+  // ? -> show help
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    showDashboardHelp();
+  }
+});
+
+function showDashboardHelp() {
+  const help = `
+    Dashboard Shortcuts:
+    • Ctrl+F: Focus search
+    • Ctrl+R: Reset filters
+    • ?: Show this help
+    • Click column headers to sort
+    • Hover cards for more info
+  `;
+  showToast(help, 'info', 8000);
+}
+
+// ===========================================================================
+// EXPORT FUNCTIONS
+// ===========================================================================
+
+window.showVehicleInfo = showVehicleInfo;
+window.runAllDiagnostics = runAllDiagnostics;
+window.viewReports = viewReports;
+window.exportData = exportData;
+window.applyFilters = applyFilters;
+window.clearFilters = clearFilters;
+</script>
+{% endblock %}
