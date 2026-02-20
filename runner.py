@@ -3,16 +3,16 @@
 DIAGNOSTIC TEST EXECUTION RUNNER (PRODUCTION – DB-AWARE, DB-AGNOSTIC)
 FULLY INTEGRATED WITH UPDATED LOADER AND SERVICE
 
-Version: 3.7.0
-Last Updated: 2026-02-19
+Version: 3.6.0
+Last Updated: 2026-02-17
 
-FIXES IN v3.7.0
+FIXES IN v3.6.0
 ────────────────
-- FIX-120: Added source tracking (section vs ecu) for auto-run programs
-- FIX-121: Enhanced VIN extraction and handling in results
-- FIX-122: Improved ECU status extraction for colored dots
-- FIX-123: Preserved stream callbacks for battery voltage
-- FIX-124: Added manual input flag for VIN programs
+- FIX-50: Support for ECU-level auto-run programs (from ecu_tests.json)
+- FIX-51: Enhanced stream callback chain for Battery Voltage
+- FIX-52: ECU status persistence for colored dots in UI
+- FIX-53: Proper handling of display_pages for VIN and Battery Voltage
+- FIX-54: Manual VIN input integration with session management
 """
 
 from __future__ import annotations
@@ -825,7 +825,7 @@ def _execute_stream_function(
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
 
-    # FIX-123: Store stream callback locally to ensure it's preserved
+    # FIX-51: Store stream callback locally to ensure it's preserved
     stream_callback = ctx.stream_callback
     _LOG_STREAM.append(task_id, f"STREAM DEBUG - Initial stream callback present: {stream_callback is not None}")
 
@@ -986,7 +986,7 @@ def _run_with_retries(
     is_generator = _is_generator_function(fn)
     is_stream = mode.is_streaming or is_generator
 
-    # FIX-123: Preserve stream callback throughout retries
+    # Preserve stream callback throughout retries
     original_stream_callback = ctx.stream_callback
     if original_stream_callback:
         _LOG_STREAM.append(task_id, f"STREAM DEBUG - Original callback preserved for retries")
@@ -1761,7 +1761,7 @@ def cancel_batch(batch_id: str) -> bool:
 
 
 # =============================================================================
-# FIX-122: AUTO-RUN HELPER - ECU STATUS EXTRACTION (ENHANCED)
+# AUTO-RUN HELPER: ECU STATUS EXTRACTION (FIX-52 ENHANCED)
 # =============================================================================
 
 def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
@@ -1826,7 +1826,7 @@ def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
 
 
 # =============================================================================
-# FIX-121: AUTO-RUN HELPER - VALUE EXTRACTION (ENHANCED FOR VIN)
+# AUTO-RUN HELPER: VALUE EXTRACTION (FIX-53 ENHANCED)
 # =============================================================================
 
 def _extract_result_value(output: Any) -> Optional[str]:
@@ -1841,7 +1841,6 @@ def _extract_result_value(output: Any) -> Optional[str]:
     - Single-key dicts: {"battery_voltage": 48.2}
     - Nested result wrappers
     - {"is_active": true} for ECU status
-    - {"result": {"vin": "..."}} nested structures
     """
     if output is None:
         return None
@@ -1855,18 +1854,11 @@ def _extract_result_value(output: Any) -> Optional[str]:
     # Case-insensitive key lookup
     output_lower = {k.lower(): v for k, v in output.items()}
 
-    # Priority order for known value keys (VIN first)
-    for key in ("vin", "value", "voltage", "result", "data", "battery_voltage"):
+    # Priority order for known value keys
+    for key in ("value", "vin", "voltage", "result", "data", "battery_voltage"):
         val = output_lower.get(key)
         if val is not None and not isinstance(val, (dict, list)):
             return str(val)
-
-    # Check for nested result structures
-    if "result" in output and isinstance(output["result"], dict):
-        result_dict = output["result"]
-        for key in ("vin", "value"):
-            if key in result_dict:
-                return str(result_dict[key])
 
     # For ECU status (used in colored dots)
     if "is_active" in output_lower:
@@ -1893,7 +1885,7 @@ def _extract_result_value(output: Any) -> Optional[str]:
 
 
 # =============================================================================
-# FIX-120: AUTO-RUN PROGRAM SPEC WITH SOURCE
+# PUBLIC API — AUTO-RUN SESSIONS (VIN SUPPORT)
 # =============================================================================
 
 @dataclass
@@ -1916,7 +1908,8 @@ class AutoRunProgramSpec:
     log_as_vin: bool = False
     is_required: bool = True
     sort_order: int = 0
-    source: str = "section"  # FIX-120: Track source (section or ecu)
+    # FIX-50: Source of program (section or ecu)
+    source: str = "section"  # "section" or "ecu"
 
 
 @dataclass
@@ -1940,7 +1933,7 @@ class AutoRunResult:
     fallback_input: Optional[Dict[str, Any]] = None
     log_as_vin: bool = False
     is_required: bool = True
-    source: str = "section"  # FIX-120: Track source
+    source: str = "section"  # FIX-50: Track source
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -1963,7 +1956,7 @@ class AutoRunResult:
             "fallback_input": self.fallback_input,
             "log_as_vin": self.log_as_vin,
             "is_required": self.is_required,
-            "source": self.source,  # FIX-120: Include source
+            "source": self.source,
         }
 
 
@@ -1978,7 +1971,7 @@ class AutoRunSession:
     status: str = "started"
     task_ids: Dict[str, str] = field(default_factory=dict)
     streams_started: bool = False
-    # Track ECU-specific programs separately
+    # FIX-50: Track ECU-specific programs separately
     ecu_programs: Dict[str, List[str]] = field(default_factory=dict)  # ecu_code -> [program_ids]
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -2079,10 +2072,6 @@ def create_auto_run_session(programs: List[AutoRunProgramSpec]) -> AutoRunSessio
     return session
 
 
-# =============================================================================
-# FIX-120 & FIX-123: START AUTO-RUN SESSION WITH SOURCE TRACKING
-# =============================================================================
-
 def start_auto_run_session(
     session_id: str,
     progress_cb: ProgressCallback = None,
@@ -2094,10 +2083,11 @@ def start_auto_run_session(
 
     Single-shot programs run first (sequentially), then streams start.
 
-    FIX-120: Supports source tracking (section vs ecu)
-    FIX-121: Enhanced VIN extraction
-    FIX-122: ECU status tracking for colored dots
-    FIX-123: Preserved stream callbacks
+    FIX-50: Supports both section-level and ECU-level programs
+    FIX-51: Enhanced stream callback chain
+    FIX-52: ECU status tracking for colored dots
+    FIX-53: Display pages support for VIN and Battery Voltage
+    FIX-54: Manual VIN input integration
 
     Args:
         session_id: Session to start
@@ -2146,7 +2136,7 @@ def start_auto_run_session(
                     fallback_input=prog.fallback_input,
                     log_as_vin=prog.log_as_vin,
                     is_required=prog.is_required,
-                    source=prog.source,  # FIX-120: Pass source
+                    source=prog.source,
                 )
                 session.update_result(prog.program_id, initial)
 
@@ -2175,15 +2165,8 @@ def start_auto_run_session(
                     passed = task_result.get("pass", False)
                     output = task_result.get("output")
 
-                    # FIX-121: Enhanced value extraction
+                    # Extract result value
                     result_value = _extract_result_value(output)
-
-                    # Check if manual input was used
-                    manual_input = False
-                    if prog.log_as_vin and result_value and len(result_value) == 17:
-                        # Check if this might be from manual entry
-                        if hasattr(prog.ctx, 'metadata') and prog.ctx.metadata.get('manual_input'):
-                            manual_input = True
 
                     final_res = AutoRunResult(
                         program_id=prog.program_id,
@@ -2203,7 +2186,6 @@ def start_auto_run_session(
                         fallback_input=prog.fallback_input,
                         log_as_vin=prog.log_as_vin,
                         is_required=prog.is_required,
-                        manual_input=manual_input,  # FIX-124: Track manual input
                         source=prog.source,
                     )
                     session.update_result(prog.program_id, final_res)
@@ -2248,7 +2230,7 @@ def start_auto_run_session(
             for prog in stream_programs:
                 _log_info(f"  Auto-run stream: {prog.program_name} (source={prog.source})")
 
-                # FIX-123: Preserve existing callback and chain with new one
+                # FIX-51: Preserve existing callback and chain with new one
                 existing_cb = prog.ctx.stream_callback
 
                 def make_stream_cb(p_id: str, existing: Optional[Callable] = None):
@@ -2363,7 +2345,7 @@ def get_auto_run_session(session_id: str) -> Optional[Dict[str, Any]]:
 
 def get_ecu_status_from_session(session_id: str, ecu_code: str) -> Optional[Dict[str, Any]]:
     """
-    FIX-122: Get ECU status for colored dots in UI.
+    FIX-52: Get ECU status for colored dots in UI.
     """
     with _AUTO_RUN_LOCK:
         session = _AUTO_RUN_SESSIONS.get(session_id)
@@ -2641,7 +2623,7 @@ class StreamingTestController:
 
 def _init_runner():
     """Initialize the runner module."""
-    _log_info(f"Runner v3.7.0 max_tasks={MAX_CONCURRENT_TASKS}")
+    _log_info(f"Runner v3.6.0 max_tasks={MAX_CONCURRENT_TASKS}")
     _log_info(f"Modes: {[m.value for m in ExecutionMode]}")
 
 
@@ -2661,7 +2643,7 @@ __all__ = [
     "create_auto_run_session",
     "start_auto_run_session",
     "get_auto_run_session",
-    "get_ecu_status_from_session",
+    "get_ecu_status_from_session",  # NEW: Get ECU status for colored dots
     "submit_manual_vin",
     "stop_auto_run_session",
     "cleanup_auto_run_sessions",
