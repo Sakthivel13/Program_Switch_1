@@ -1,14 +1,16 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.1.0",
   "vehicle": "TVS iQube ST",
   "sections": [
     {
       "name": "Diagnostics",
       "slug": "diagnostics",
       "section_type": "diagnostics",
-      "description": "ECU diagnostics and parameter monitoring",
-      "icon": "icons/diagnostics.svg",
+      "description": "ECU diagnostics and parameter monitoring for TVS iQube ST",
+      "icon": "fa-microchip",
       "sort_order": 1,
+      "is_active": true,
+      "ecus": ["BMS", "VCU", "MCU"],
       "auto_run_programs": [
         {
           "program_id": "AUTO_VIN_READ",
@@ -18,18 +20,20 @@
           "function_name": "read_vin",
           "execution_mode": "single",
           "display_type": "text",
-          "display_label": "VIN",
+          "display_label": "Vehicle VIN",
           "display_unit": null,
           "display_pages": ["section", "ecu", "parameter"],
           "ecu_targets": ["BMS"],
           "output_limits": [],
           "fallback_action": "manual_input",
           "fallback_input": {
-            "label": "Enter VIN",
-            "input_type": "string",
+            "label": "Enter VIN Manually",
+            "input_type": "hex",
             "length": 17,
             "format_hint": "17-character VIN (no I, O, Q)",
-            "is_required": true
+            "is_required": true,
+            "default_value": null,
+            "validation_pattern": "^[A-HJ-NPR-Z0-9]{17}$"
           },
           "log_as_vin": true,
           "is_required": true,
@@ -38,13 +42,13 @@
         },
         {
           "program_id": "AUTO_BATTERY_VOLTAGE",
-          "program_name": "Battery Voltage",
+          "program_name": "Battery Voltage Monitor",
           "program_type": "stream",
           "module_name": "battery_voltage",
           "function_name": "read_battery_voltage_stream",
           "execution_mode": "stream",
           "display_type": "value",
-          "display_label": "Battery Voltage",
+          "display_label": "Traction Battery",
           "display_unit": "V",
           "display_pages": ["section", "ecu", "parameter"],
           "ecu_targets": ["BMS"],
@@ -56,29 +60,82 @@
               "unit": "V" 
             }
           ],
-          "fallback_action": "none",
+          "fallback_action": "warn_and_continue",
           "fallback_input": null,
           "log_as_vin": false,
           "is_required": false,
           "timeout_sec": 0,
           "sort_order": 2
+        },
+        {
+          "program_id": "AUTO_SOC_CHECK",
+          "program_name": "State of Charge",
+          "program_type": "single",
+          "module_name": "soc_check",
+          "function_name": "read_soc",
+          "execution_mode": "single",
+          "display_type": "value",
+          "display_label": "Battery SoC",
+          "display_unit": "%",
+          "display_pages": ["section", "ecu"],
+          "ecu_targets": ["BMS"],
+          "output_limits": [
+            { 
+              "signal": "soc", 
+              "lsl": 0, 
+              "usl": 100, 
+              "unit": "%" 
+            }
+          ],
+          "fallback_action": "warn_and_continue",
+          "fallback_input": null,
+          "log_as_vin": false,
+          "is_required": false,
+          "timeout_sec": 10,
+          "sort_order": 3
         }
       ],
-      "is_active": true,
-      "ecus": ["BMS"],
       "health_tabs": []
     },
     {
       "name": "Vehicle Health Report",
       "slug": "vehicle_health",
       "section_type": "vehicle_health",
-      "description": "Comprehensive vehicle health assessment",
-      "icon": "icons/vehicle_health.svg",
+      "description": "Comprehensive vehicle health assessment and diagnostic reports",
+      "icon": "fa-heartbeat",
       "sort_order": 2,
-      "auto_run_programs": [],
       "is_active": true,
       "ecus": [],
-      "health_tabs": []
+      "auto_run_programs": [],
+      "health_tabs": [
+        {
+          "folder_code": "BATTERY_HEALTH",
+          "folder_name": "Battery Health",
+          "description": "Battery performance and degradation analysis",
+          "execution_class": "STREAM",
+          "icon": "fa-battery-full",
+          "sort_order": 1,
+          "is_active": true
+        },
+        {
+          "folder_code": "MOTOR_PERFORMANCE",
+          "folder_name": "Motor Performance",
+          "description": "Electric motor efficiency and diagnostics",
+          "execution_class": "SINGLE",
+          "icon": "fa-bolt",
+          "sort_order": 2,
+          "is_active": true
+        },
+        {
+          "folder_code": "THERMAL_MANAGEMENT",
+          "folder_name": "Thermal System",
+          "description": "Battery and motor thermal analysis",
+          "execution_class": "STREAM",
+          "icon": "fa-thermometer-half",
+          "sort_order": 3,
+          "is_active": true
+        }
+      ]
     }
   ]
 }
