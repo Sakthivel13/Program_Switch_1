@@ -1,71 +1,45 @@
--- =============================================================================
--- FIX ALL DATABASE ISSUES
--- =============================================================================
+# In service.py - replace the get_can_configuration function
 
--- 1. Add missing updated_at to vehicle_diagnostic_actions
-ALTER TABLE app.vehicle_diagnostic_actions 
-ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+def get_can_configuration() -> Dict[str, Any]:
+    """
+    Get CAN interface configuration with guaranteed keys.
+    Returns dict with at least 'can_interface' and 'bitrate' keys.
+    """
+    default_config = {
+        "can_interface": "PCAN_USBBUS1",
+        "bitrate": 500000,
+    }
 
-CREATE INDEX IF NOT EXISTS idx_vehicle_diagnostic_actions_updated 
-ON app.vehicle_diagnostic_actions(updated_at);
+    if not CAN_UTILS_AVAILABLE:
+        return default_config.copy()
 
--- 2. Fix cleanup function
-CREATE OR REPLACE FUNCTION app.cleanup_expired_sessions()
-RETURNS INTEGER AS $$
-DECLARE
-    cleaned INTEGER;
-    streams_cleaned INTEGER;
-    ecu_cleaned INTEGER;
-BEGIN
-    WITH updated AS (
-        UPDATE app.auto_run_sessions
-        SET status = 'expired',
-            ended_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE status IN ('running', 'started')
-          AND last_accessed < NOW() - INTERVAL '2 hours'
-        RETURNING session_id
-    )
-    SELECT COUNT(*) INTO cleaned FROM updated;
-    
-    DELETE FROM app.auto_run_stream_values
-    WHERE updated_at < NOW() - INTERVAL '1 hour'
-    RETURNING COUNT(*) INTO streams_cleaned;
-    
-    DELETE FROM app.ecu_active_status
-    WHERE session_id IN (
-        SELECT session_id FROM app.auto_run_sessions
-        WHERE status = 'expired' 
-           OR ended_at < NOW() - INTERVAL '2 hours'
-    )
-    RETURNING COUNT(*) INTO ecu_cleaned;
-    
-    RETURN cleaned + streams_cleaned + ecu_cleaned;
-END;
-$$ LANGUAGE plpgsql;
+    try:
+        # Use can_utils.get_can_config if available
+        if get_can_config is not None:
+            config = get_can_config()
+            # Ensure both keys exist
+            return {
+                "can_interface": config.get("can_interface", default_config["can_interface"]),
+                "bitrate": config.get("bitrate", default_config["bitrate"]),
+            }
+        
+        # Fallback to individual values
+        interface = get_config_value("can_interface")
+        bitrate = get_config_value("can_bitrate")
+        vci_mode = get_config_value("vci_mode", "").lower()
 
--- 3. Ensure config table has required keys
-INSERT INTO app.config (key_name, value_text) 
-VALUES ('can_interface', 'PCAN_USBBUS1')
-ON CONFLICT (key_name) DO NOTHING;
+        # Determine interface based on vci_mode if not set
+        if not interface:
+            if vci_mode == "socketcan":
+                interface = "can0"
+            else:
+                interface = default_config["can_interface"]
 
-INSERT INTO app.config (key_name, value_text) 
-VALUES ('can_bitrate', '500000')
-ON CONFLICT (key_name) DO NOTHING;
+        return {
+            "can_interface": interface or default_config["can_interface"],
+            "bitrate": int(bitrate) if bitrate else default_config["bitrate"],
+        }
 
-INSERT INTO app.config (key_name, value_text) 
-VALUES ('vci_mode', 'pcan')
-ON CONFLICT (key_name) DO NOTHING;
-
--- 4. Update any NULL values
-UPDATE app.auto_run_sessions 
-SET updated_at = COALESCE(ended_at, started_at, CURRENT_TIMESTAMP)
-WHERE updated_at IS NULL;
-
-UPDATE app.auto_run_stream_values 
-SET updated_at = CURRENT_TIMESTAMP
-WHERE updated_at IS NULL;
-
-UPDATE app.auto_run_results 
-SET source = 'section' 
-WHERE source IS NULL;
+    except Exception as e:
+        _log_error(f"Error getting CAN configuration: {e}")
+        return default_config.copy()
