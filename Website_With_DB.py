@@ -3,10 +3,10 @@
 NIRIX DIAGNOSTICS – MAIN WEB APPLICATION (PostgreSQL Production)
 FULLY INTEGRATED WITH UPDATED LOADER, SERVICE, RUNNER, AND SCANNER (OpenCV)
 
-Version: 3.2.0
-Last Updated: 2026-02-20
+Version: 3.2.1
+Last Updated: 2026-02-21
 
-FIXES IN v3.2.0
+FIXES IN v3.2.1
 ────────────────
 - FIX-30: Stream values API endpoint - ensures auto_run_stream_values are queryable
 - FIX-31: Auto-run session VIN persistence - VIN displays correctly in UI
@@ -17,6 +17,8 @@ FIXES IN v3.2.0
 - FIX-37: Vehicle selection page with images and VIN patterns
 - FIX-38: Fixed missing updated_at columns in cleanup
 - FIX-39: Enhanced ECU status polling with proper error handling
+- FIX-66: Fixed cleanup loop rowcount attribute error
+- FIX-69: Session heartbeat for stale detection
 """
 
 # =============================================================================
@@ -177,6 +179,7 @@ try:
     from diagnostics.can_utils import (
         get_config_value,
         set_config_value,
+        get_can_config,
     )
     CAN_UTILS_AVAILABLE = True
 except ImportError:
@@ -575,7 +578,7 @@ def _before_request():
             app.logger.warning(f"Failed to update session last_accessed: {e}")
 
 # =============================================================================
-# PERIODIC CLEANUP
+# PERIODIC CLEANUP - FIXED VERSION (FIX-66)
 # =============================================================================
 def _start_cleanup_thread():
     def cleanup_loop():
@@ -584,45 +587,59 @@ def _start_cleanup_thread():
             try:
                 _time.sleep(300)  # 5 minutes
                 
-                # Use database cleanup function if available
+                # Try to use database cleanup function
                 try:
                     result = execute("SELECT app.cleanup_expired_sessions()")
-                    if result:
-                        append_global_log("Database cleanup completed", "DEBUG")
+                    # Handle different return types safely
+                    if hasattr(result, 'scalar'):
+                        count = result.scalar()
+                        if count and int(count) > 0:
+                            append_global_log(f"Cleaned up {count} items", "DEBUG")
+                    elif result:
+                        append_global_log(f"Cleanup completed", "DEBUG")
                 except Exception as e:
+                    append_global_log(f"Cleanup function error: {e}", "WARN")
+                    
                     # Fallback to manual cleanup
                     removed = purge_completed_tasks()
                     
-                    # Clean up old auto-run sessions (FIX-36)
-                    expired = execute("""
-                        UPDATE app.auto_run_sessions
-                        SET status = 'expired', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                        WHERE status IN ('running', 'started')
-                          AND last_accessed < NOW() - INTERVAL '2 hours'
-                        RETURNING session_id
-                    """)
+                    # Clean up old auto-run sessions
+                    try:
+                        expire_result = execute("""
+                            UPDATE app.auto_run_sessions
+                            SET status = 'expired', 
+                                ended_at = CURRENT_TIMESTAMP, 
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE status IN ('running', 'started')
+                              AND last_accessed < NOW() - INTERVAL '2 hours'
+                        """)
+                        # Safely check rowcount
+                        if hasattr(expire_result, 'rowcount') and expire_result.rowcount > 0:
+                            append_global_log(f"Expired {expire_result.rowcount} stale auto-run sessions", "DEBUG")
+                    except Exception as e2:
+                        append_global_log(f"Session cleanup error: {e2}", "WARN")
                     
-                    if expired and expired.rowcount > 0:
-                        append_global_log(f"Expired {expired.rowcount} stale auto-run sessions", "DEBUG")
-                    
-                    # Clean up old stream values (FIX-33)
-                    stream_removed = execute("""
-                        DELETE FROM app.auto_run_stream_values
-                        WHERE updated_at < NOW() - INTERVAL '1 hour'
-                    """)
+                    # Clean up old stream values
+                    try:
+                        stream_result = execute("""
+                            DELETE FROM app.auto_run_stream_values
+                            WHERE updated_at < NOW() - INTERVAL '1 hour'
+                        """)
+                        if hasattr(stream_result, 'rowcount') and stream_result.rowcount > 0:
+                            append_global_log(f"Cleaned {stream_result.rowcount} stream values", "DEBUG")
+                    except Exception:
+                        pass
                     
                     # Optional scanner cleanup
                     if SCANNER_AVAILABLE and cleanup_scans is not None:
                         cleanup_scans(max_age_sec=300)
                     
-                    if removed > 0 or (stream_removed and stream_removed.rowcount > 0):
-                        append_global_log(f"Cleaned up {removed} tasks, {stream_removed.rowcount if stream_removed else 0} stream values", "DEBUG")
+                    if removed > 0:
+                        append_global_log(f"Cleaned up {removed} tasks", "DEBUG")
 
             except Exception as e:
                 app.logger.error(f"Cleanup error: {e}")
                 app.logger.error(traceback.format_exc())
-            
-            _time.sleep(300)  # Wait before next cleanup
 
     threading.Thread(target=cleanup_loop, daemon=True).start()
 
@@ -770,8 +787,16 @@ def login():
         return render_template("login.html", error="Account disabled", user=None)
 
     set_config_value("vci_mode", vci_mode)
-    can_interface = "PCAN_USBBUS1" if vci_mode == "pcan" else "can0"
-    set_config_value("can_interface", can_interface)
+    
+    # Set CAN interface based on VCI mode
+    if vci_mode == "pcan":
+        set_config_value("can_interface", "PCAN_USBBUS1")
+        set_config_value("can_backend", "pcan")
+    elif vci_mode == "socketcan":
+        set_config_value("can_interface", "can0")
+        set_config_value("can_backend", "socketcan")
+    
+    set_config_value("can_bitrate", "500000")
 
     login_user_into_session(user)
     append_global_log(f"User logged in: {email} with login_id={session['user'].get('login_id')}")
@@ -1067,7 +1092,7 @@ def tests_root():
         except Exception as e:
             app.logger.warning(f"Failed to load VIN for session {auto_run_session_id}: {e}")
 
-    # PHASE 0: Vehicle selection (ENHANCED with images and VIN patterns - FIX-37)
+    # PHASE 0: Vehicle selection
     if not model_name:
         if role == ROLE_SUPER_ADMIN:
             vehicles = query_all("""
@@ -1532,7 +1557,7 @@ def api_auto_run_status(session_id: str):
     if "user" not in session:
         return jsonify({"ok": False, "error": "not_authenticated"}), 401
 
-    # 1) Live status from service (what the UI expects)
+    # 1) Live status from service
     try:
         live = svc_get_auto_run_status(session_id)
         if not live or live.get("ok") is not True:
@@ -1541,7 +1566,7 @@ def api_auto_run_status(session_id: str):
         app.logger.exception("Failed to get auto-run live status")
         return jsonify({"ok": False, "error": str(e)}), 500
 
-    # 2) Optional DB snapshot (VIN persistence, timestamps, etc.)
+    # 2) DB snapshot
     try:
         row = query_one("""
             SELECT session_id, vehicle_id, vehicle_name, section_type,
@@ -1586,7 +1611,7 @@ def api_auto_run_heartbeat(session_id: str):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # =============================================================================
-# FIX-30: API: AUTO-RUN STREAM VALUES (FOR LIVE DISPLAY)
+# API: AUTO-RUN STREAM VALUES (FOR LIVE DISPLAY)
 # =============================================================================
 @app.get("/api/auto_run/<session_id>/stream_values")
 def api_get_stream_values(session_id: str):
@@ -1598,7 +1623,6 @@ def api_get_stream_values(session_id: str):
         return jsonify({"ok": False, "error": "not_authenticated"}), 401
     
     try:
-        # FIX-32: Enhanced error handling and logging
         app.logger.debug(f"Fetching stream values for session {session_id}")
         
         # Fetch latest values for this session
@@ -1719,7 +1743,6 @@ def api_scan_cancel(scan_id: str):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-# OPTIONAL: backend preview frame (scanner.py must support get_scan_frame_jpeg)
 @app.get("/api/scan/<scan_id>/frame")
 def api_scan_frame(scan_id: str):
     if "user" not in session:
@@ -2209,7 +2232,7 @@ def health_check():
         "active_tasks": stats.get("tasks", {}).get("active", 0),
         "scanner_available": SCANNER_AVAILABLE,
         "database_connected": db_ok,
-        "version": "3.2.0",
+        "version": "3.2.1",
     })
 
 # =============================================================================
@@ -2231,6 +2254,16 @@ def api_sync_tests():
     except Exception as e:
         app.logger.exception("Test sync failed")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+# =============================================================================
+# SESSION HEARTBEAT (FIX-69)
+# =============================================================================
+@app.route("/api/session/heartbeat", methods=["POST"])
+def api_session_heartbeat():
+    """Simple endpoint to keep session alive."""
+    if "user" not in session:
+        return jsonify({"ok": False, "error": "not_authenticated"}), 401
+    return jsonify({"ok": True, "timestamp": datetime.datetime.utcnow().isoformat()})
 
 # =============================================================================
 # ERROR HANDLERS
@@ -2278,7 +2311,7 @@ if __name__ == "__main__":
         pass
 
     print("\n" + "=" * 60)
-    print("NIRIX Diagnostics v3.2.0")
+    print("NIRIX Diagnostics v3.2.1")
     print("URL: http://0.0.0.0:8000")
     print(f"Station ID: {STATION_ID}")
     print(f"Active Tasks: {get_active_task_count()}")
