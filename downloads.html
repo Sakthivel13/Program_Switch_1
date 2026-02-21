@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Downloads – TVS NIRIX{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+    <div class="d-flex align-items-center mb-3 gap-2">
+      <span style="font-size:20px;">⬇</span>
+      <h5 class="mb-0">Downloads</h5>
+    </div>
+
+    <!-- =====================================================
+         SEARCH
+    ====================================================== -->
+    <div class="mb-3">
+      <input id="downloadSearch"
+             type="text"
+             class="form-control form-control-sm"
+             placeholder="Search clients, apps, CAN drivers…"
+             autocomplete="off">
+    </div>
+
+    <!-- =====================================================
+         APPLICATION CLIENTS
+    ====================================================== -->
+    <div class="row g-3 mb-4 download-section">
+
+      <!-- WINDOWS CLIENT -->
+      <div class="col-12 col-lg-6 download-item"
+           data-name="windows diagnostic client exe desktop">
+        <div class="card card-shadow h-100 hover-raise">
+          <div class="card-header py-2 text-white"
+               style="background-color:var(--tvs-blue); border-radius:12px 12px 0 0;">
+            <strong>Windows Diagnostic Client</strong>
+          </div>
+
+          <div class="card-body text-center d-flex flex-column justify-content-center"
+               style="min-height:140px;">
+            <div style="font-size:36px; opacity:0.3;">🖥️</div>
+            <span class="badge bg-warning text-dark mt-2">Coming Soon</span>
+            <div class="small text-muted mt-2">
+              Windows EXE client will be available soon.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ANDROID CLIENT -->
+      <div class="col-12 col-lg-6 download-item"
+           data-name="android apk mobile application">
+        <div class="card card-shadow h-100 hover-raise">
+          <div class="card-header py-2 text-white"
+               style="background-color:#15803d; border-radius:12px 12px 0 0;">
+            <strong>Android Application</strong>
+          </div>
+
+          <div class="card-body text-center d-flex flex-column justify-content-center"
+               style="min-height:140px;">
+            <div style="font-size:36px; opacity:0.3;">📱</div>
+            <span class="badge bg-warning text-dark mt-2">Coming Soon</span>
+            <div class="small text-muted mt-2">
+              Android APK will be available soon.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =====================================================
+         CAN INTERFACE DRIVERS
+    ====================================================== -->
+    <div class="card card-shadow mb-3">
+      <div class="card-header py-2"
+           style="background-color:var(--tvs-yellow); border-radius:12px 12px 0 0;">
+        <strong>CAN Interface Drivers</strong>
+      </div>
+
+      <div class="card-body">
+
+        <p class="small text-muted mb-3">
+          Download the appropriate CAN interface driver for your diagnostic hardware.
+        </p>
+
+        {% if driver_links %}
+        <div class="row g-3 download-section">
+
+          {% for key, drv in driver_links.items() %}
+          <div class="col-12 col-md-4 download-item"
+               data-name="{{ drv.name|lower }} {{ drv.vendor|lower }} {{ drv.description|lower }} can driver">
+
+            <div class="card h-100 border-0 hover-raise"
+                 style="box-shadow:0 0.1rem 0.4rem rgba(15,23,42,0.15); border-radius:12px;">
+
+              <div class="card-body d-flex flex-column">
+
+                <div class="text-center mb-2"
+                     style="font-size:32px; color:var(--tvs-yellow);">
+                  🔌
+                </div>
+
+                <h6 class="text-center mb-0">{{ drv.name }}</h6>
+                <div class="small text-muted text-center">{{ drv.vendor }}</div>
+
+                <div class="small text-muted text-center mb-3">
+                  {{ drv.description }}
+                </div>
+
+                <div class="mt-auto d-flex justify-content-center gap-2">
+                  <a href="{{ drv.url }}"
+                     target="_blank"
+                     class="btn btn-sm btn-outline-warning">
+                    Download
+                  </a>
+
+                  <button class="btn btn-sm btn-outline-secondary"
+                          onclick="copyLink('{{ drv.url }}')">
+                    Copy Link
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+
+        </div>
+        {% else %}
+          <div class="alert alert-warning">
+            No CAN drivers are configured.
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* =========================================================
+   SEARCH FILTER (MULTI-KEYWORD)
+========================================================= */
+const searchInput = document.getElementById("downloadSearch");
+
+if (searchInput) {
+  searchInput.addEventListener("input", function () {
+    const terms = this.value.toLowerCase().split(" ").filter(Boolean);
+    document.querySelectorAll(".download-item").forEach(item => {
+      const text = item.dataset.name || "";
+      const match = terms.every(t => text.includes(t));
+      item.style.display = match ? "" : "none";
+    });
+  });
+}
+
+/* =========================================================
+   COPY LINK
+========================================================= */
+function copyLink(url) {
+  navigator.clipboard.writeText(url)
+    .then(() => alert("Link copied to clipboard"))
+    .catch(() => alert("Unable to copy link"));
+}
+</script>
+
+<style>
+.hover-raise {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-raise:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+}
+</style>
+{% endblock %}

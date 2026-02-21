@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Logs – TVS NIRIX{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center mt-4">
+  <div class="col-12 col-lg-11">
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h4 class="fw-bold mb-0">Execution Logs</h4>
+        <small class="text-muted">
+          Vehicle diagnostic logs · VIN scoped · Read-only
+        </small>
+      </div>
+
+      <a href="{{ url_for('dashboard') }}"
+         class="btn btn-sm btn-outline-secondary">
+        Back to Dashboard
+      </a>
+    </div>
+
+    <!-- =====================================================
+         FILTERS
+    ====================================================== -->
+    <form method="get" class="card p-3 shadow-sm mb-3">
+      <div class="row g-2 align-items-end">
+
+        <!-- SEARCH -->
+        <div class="col-md-4">
+          <label class="form-label small">Search</label>
+          <input
+            name="q"
+            value="{{ q or '' }}"
+            class="form-control"
+            placeholder="Filename, VIN, vehicle"
+            autocomplete="off">
+        </div>
+
+        <!-- VIN -->
+        <div class="col-md-3">
+          <label class="form-label small">VIN</label>
+          <select name="vin" class="form-select">
+            <option value="">All VINs</option>
+            {% for v in vins %}
+              <option value="{{ v }}"
+                {% if v == vin_filter %}selected{% endif %}>
+                {{ v }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- VEHICLE -->
+        <div class="col-md-3">
+          <label class="form-label small">Vehicle</label>
+          <select name="vehicle_name" class="form-select">
+            <option value="">All Vehicles</option>
+            {% for m in vehicle_names %}
+              <option value="{{ m }}"
+                {% if m == vehicle_name_filter %}selected{% endif %}>
+                {{ m }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- APPLY -->
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100">
+            Apply
+          </button>
+        </div>
+
+      </div>
+    </form>
+
+    <!-- =====================================================
+         LOG TABLE
+    ====================================================== -->
+    <div class="card p-3 shadow-sm">
+      <div class="table-responsive">
+
+        <table class="table table-sm table-bordered align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Filename</th>
+              <th>Vehicle</th>
+              <th>VIN</th>
+              <th>Date</th>
+              <th style="width:160px;">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% if logs %}
+              {% for l in logs %}
+              <tr>
+
+                <!-- FILENAME -->
+                <td>
+                  <strong>{{ l.filename }}</strong>
+                </td>
+
+                <!-- VEHICLE -->
+                <td>
+                  {{ l.vehicle_name or "-" }}
+                </td>
+
+                <!-- VIN -->
+                <td>
+                  <span class="font-monospace small">
+                    {{ l.vin or "-" }}
+                  </span>
+                </td>
+
+                <!-- DATE -->
+                <td class="small">
+                  {{ l.created_at }}
+                </td>
+
+                <!-- ACTIONS -->
+                <td class="d-flex gap-2">
+
+                  <!-- VIEW -->
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    onclick="viewLog({{ l.id }})">
+                    View
+                  </button>
+
+                  <!-- DOWNLOAD -->
+                  <a
+                    class="btn btn-sm btn-outline-primary"
+                    href="{{ url_for('logs_download', log_id=l.id) }}">
+                    Download
+                  </a>
+
+                </td>
+
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="5" class="text-center text-muted py-4">
+                  No logs found
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+
+      </div>
+
+      <!-- =====================================================
+           PAGINATION
+      ====================================================== -->
+      {% if total_pages > 1 %}
+      <div class="d-flex justify-content-between align-items-center mt-2">
+
+        <small class="text-muted">
+          Page {{ page }} of {{ total_pages }} · {{ total }} logs
+        </small>
+
+        <nav>
+          <ul class="pagination pagination-sm mb-0">
+            {% for p in range(1, total_pages + 1) %}
+              <li class="page-item {% if p == page %}active{% endif %}">
+                <a
+                  class="page-link"
+                  href="?q={{ q }}&vin={{ vin_filter }}&vehicle_name={{ vehicle_name_filter }}&page={{ p }}">
+                  {{ p }}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </nav>
+
+      </div>
+      {% endif %}
+
+    </div>
+
+  </div>
+</div>
+
+<!-- =====================================================
+     VIEW LOG MODAL
+====================================================== -->
+<div class="modal fade" id="logViewModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="logViewTitle">Log Viewer</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <pre
+          id="logViewContent"
+          class="bg-dark text-light p-3 rounded small"
+          style="max-height:70vh;"></pre>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* =====================================================
+   VIEW LOG (RBAC SAFE)
+===================================================== */
+async function viewLog(id) {
+  const url =
+    "{{ url_for('logs_view', log_id=0) }}".replace("0", id);
+
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+
+    const d = await r.json();
+
+    document.getElementById("logViewTitle").innerText =
+      d.filename || "Log";
+
+    document.getElementById("logViewContent").innerText =
+      d.content || "";
+
+    new bootstrap.Modal(
+      document.getElementById("logViewModal")
+    ).show();
+
+  } catch (e) {
+    alert("Failed to load log");
+    console.error(e);
+  }
+}
+</script>
+{% endblock %}

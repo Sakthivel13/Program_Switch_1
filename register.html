@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Register – TVS NIRIX{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center" style="margin-top:60px;">
+  <div class="col-12 col-sm-10 col-md-7 col-lg-5">
+
+    <div class="card shadow-sm p-4" style="border-radius:14px;">
+
+      <!-- =====================================================
+           HEADER
+      ====================================================== -->
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h5 class="mb-0 fw-bold">User Registration</h5>
+          <div class="small text-muted">
+            Request access to TVS NIRIX Diagnostics
+          </div>
+        </div>
+
+        {% if pending %}
+          <a href="{{ url_for('register', reset=1) }}"
+             class="btn btn-sm btn-outline-secondary">
+            Restart
+          </a>
+        {% else %}
+          <a href="{{ url_for('root') }}"
+             class="btn btn-sm btn-outline-secondary">
+            Login
+          </a>
+        {% endif %}
+      </div>
+
+      <!-- =====================================================
+           ALERTS
+      ====================================================== -->
+      {% if error %}
+        <div class="alert alert-danger py-2 small">
+          {{ error }}
+        </div>
+      {% endif %}
+
+      {% if message %}
+        <div class="alert alert-info py-2 small">
+          {{ message }}
+        </div>
+      {% endif %}
+
+      <!-- =====================================================
+           STEP 2 — APPROVAL CODE VERIFICATION
+      ====================================================== -->
+      {% if pending %}
+
+        <div class="mb-3 small">
+          <p class="mb-1">Approval request submitted for:</p>
+          <ul class="mb-2">
+            <li><strong>Name:</strong> {{ pending.name }}</li>
+            <li><strong>Employee ID:</strong> {{ pending.employee_id }}</li>
+            <li><strong>Email:</strong> {{ pending.email }}</li>
+            <li><strong>Requested Role:</strong> {{ pending.role|capitalize }}</li>
+          </ul>
+
+          <p class="text-muted mb-0">
+            Please contact the approver to obtain the 6-digit approval code.
+          </p>
+        </div>
+
+        <!-- VERIFY APPROVAL CODE -->
+        <form method="post" class="mb-3">
+          <input type="hidden" name="action" value="verify">
+
+          <label class="form-label small fw-semibold">
+            Approval Code
+          </label>
+
+          <input id="approvalInput"
+                 type="text"
+                 name="approval_code"
+                 maxlength="6"
+                 pattern="[0-9]{6}"
+                 inputmode="numeric"
+                 class="form-control text-center mb-3"
+                 style="font-size:20px; letter-spacing:6px;"
+                 placeholder="••••••"
+                 required>
+
+          <button class="btn btn-tvs w-100">
+            VERIFY & COMPLETE REGISTRATION
+          </button>
+        </form>
+
+        <!-- RESEND CODE -->
+        <form method="post">
+          <input type="hidden" name="action" value="resend">
+          <button class="btn btn-outline-primary w-100">
+            RESEND APPROVAL CODE
+          </button>
+        </form>
+
+        <div class="small text-muted mt-3">
+          Entered wrong details?
+          <a href="{{ url_for('register', reset=1) }}">Start again</a>.
+        </div>
+
+      {% else %}
+
+      <!-- =====================================================
+           STEP 1 — REGISTRATION DETAILS
+      ====================================================== -->
+        <form method="post">
+          <input type="hidden" name="action" value="start">
+
+          <!-- NAME -->
+          <label class="form-label small fw-semibold">Name</label>
+          <input type="text"
+                 name="name"
+                 class="form-control mb-2"
+                 placeholder="Full Name"
+                 autocomplete="name"
+                 required>
+
+          <!-- EMPLOYEE ID -->
+          <label class="form-label small fw-semibold">Employee ID</label>
+          <input type="text"
+                 name="employee_id"
+                 class="form-control mb-2"
+                 placeholder="Employee ID"
+                 autocomplete="off"
+                 required>
+
+          <!-- EMAIL -->
+          <label class="form-label small fw-semibold">Email ID</label>
+          <input type="email"
+                 name="email"
+                 class="form-control mb-2"
+                 placeholder="your.name@company.com"
+                 autocomplete="email"
+                 required>
+
+          <!-- ROLE -->
+          <label class="form-label small fw-semibold">Requested Role</label>
+          <select name="role"
+                  class="form-select mb-1"
+                  required>
+            <option value="technician" selected>
+              Technician (Tester)
+            </option>
+            <option value="admin">
+              Admin (Production)
+            </option>
+            <option value="super_admin">
+              Super Admin (Developer)
+            </option>
+          </select>
+
+          <div class="small text-muted mb-2">
+            Higher roles require explicit approval from an authorized approver.
+          </div>
+
+          <!-- PIN -->
+          <label class="form-label small fw-semibold">
+            PIN (4 digits)
+          </label>
+          <div class="position-relative mb-2">
+            <input type="password"
+                   name="pin"
+                   id="pinField"
+                   maxlength="4"
+                   pattern="[0-9]{4}"
+                   inputmode="numeric"
+                   class="form-control"
+                   placeholder="Enter 4-digit PIN"
+                   required>
+
+            <span id="togglePin"
+                  class="position-absolute"
+                  style="right:12px; top:10px; cursor:pointer; opacity:0.6;">
+              👁
+            </span>
+          </div>
+
+          <!-- CONFIRM PIN -->
+          <label class="form-label small fw-semibold">
+            Confirm PIN
+          </label>
+          <div class="position-relative mb-3">
+            <input type="password"
+                   name="pin_confirm"
+                   id="pinConfirmField"
+                   maxlength="4"
+                   pattern="[0-9]{4}"
+                   inputmode="numeric"
+                   class="form-control"
+                   placeholder="Re-enter PIN"
+                   required>
+
+            <span id="togglePinConfirm"
+                  class="position-absolute"
+                  style="right:12px; top:10px; cursor:pointer; opacity:0.6;">
+              👁
+            </span>
+          </div>
+
+          <button class="btn btn-tvs w-100">
+            REQUEST APPROVAL
+          </button>
+        </form>
+
+        <div class="mt-3 text-center small">
+          Already registered?
+          <a href="{{ url_for('root') }}">Back to Login</a>
+        </div>
+
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* =====================================================
+   PIN VISIBILITY TOGGLES
+===================================================== */
+(function () {
+  const pin = document.getElementById("pinField");
+  const pinC = document.getElementById("pinConfirmField");
+  const t1 = document.getElementById("togglePin");
+  const t2 = document.getElementById("togglePinConfirm");
+
+  if (t1 && pin) {
+    t1.onclick = () =>
+      pin.type = pin.type === "password" ? "text" : "password";
+  }
+
+  if (t2 && pinC) {
+    t2.onclick = () =>
+      pinC.type = pinC.type === "password" ? "text" : "password";
+  }
+
+  const approval = document.getElementById("approvalInput");
+  if (approval) approval.focus();
+})();
+</script>
+{% endblock %}
