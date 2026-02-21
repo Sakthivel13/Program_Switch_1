@@ -24,7 +24,7 @@ Expected keys:
   - vci_mode      : pcan | socketcan (legacy)
 
 Version: 2.1.0
-Last Updated: 2026-02-20
+Last Updated: 2026-02-21
 """
 
 from __future__ import annotations
@@ -189,37 +189,45 @@ def delete_config_value(key: str) -> bool:
 
 
 # =============================================================================
-# CAN CONFIG RESOLUTION
+# CAN CONFIG RESOLUTION - FIXED VERSION with guaranteed keys
 # =============================================================================
 
 def get_can_config() -> Dict[str, Any]:
     """
     Resolve CAN configuration from DB with intelligent defaults.
-
+    
     Returns:
       {
-        "backend": "pcan" | "socketcan" | "virtual",
-        "channel": "PCAN_USBBUS1" | "can0" | "vcan0",
+        "can_interface": "PCAN_USBBUS1" | "can0" | "vcan0",
         "bitrate": 500000,
+        "backend": "pcan" | "socketcan" | "virtual",
         "fd": false,
         "supports_fd": false,
-        "supports_brs": false
+        "channel": "PCAN_USBBUS1" | "can0" | "vcan0"  # Alias for backward compatibility
       }
     """
-    config = {}
+    # Default config with guaranteed keys
+    default_config = {
+        "can_interface": DEFAULT_INTERFACE,
+        "bitrate": DEFAULT_BITRATE,
+        "backend": DEFAULT_BACKEND,
+        "fd": DEFAULT_FD,
+        "supports_fd": False,
+        "channel": DEFAULT_INTERFACE,  # Alias for backward compatibility
+    }
     
     try:
-        # Read all relevant config keys
-        backend_raw = (get_config_value("can_backend", DEFAULT_BACKEND) or "").strip().lower()
-        interface_raw = (get_config_value("can_interface", "") or "").strip()
-        bitrate_raw = (get_config_value("can_bitrate", str(DEFAULT_BITRATE)) or "").strip()
-        fd_raw = (get_config_value("can_fd", "false") or "").strip().lower()
+        # Read from database
+        interface_raw = get_config_value("can_interface", "")
+        bitrate_raw = get_config_value("can_bitrate", str(DEFAULT_BITRATE))
+        backend_raw = get_config_value("can_backend", DEFAULT_BACKEND)
+        fd_raw = get_config_value("can_fd", "false")
         
         # Legacy vci_mode support
-        vci_mode = (get_config_value("vci_mode", "") or "").strip().lower()
+        vci_mode = get_config_value("vci_mode", "").lower()
         
         # Determine backend
-        backend = backend_raw
+        backend = backend_raw.lower().strip()
         if backend not in SUPPORTED_BACKENDS:
             if vci_mode == "socketcan":
                 backend = "socketcan"
@@ -227,17 +235,16 @@ def get_can_config() -> Dict[str, Any]:
                 backend = "pcan"
             else:
                 backend = DEFAULT_BACKEND
-                _log_warn(f"Unknown backend '{backend_raw}', using '{backend}'")
         
         # Determine interface/channel
-        channel = interface_raw
-        if not channel:
+        can_interface = interface_raw.strip()
+        if not can_interface:
             if backend == "socketcan" or vci_mode == "socketcan":
-                channel = "can0"
+                can_interface = "can0"
             elif backend == "virtual":
-                channel = "vcan0"
+                can_interface = "vcan0"
             else:
-                channel = DEFAULT_INTERFACE
+                can_interface = DEFAULT_INTERFACE
         
         # Determine bitrate
         try:
@@ -247,43 +254,27 @@ def get_can_config() -> Dict[str, Any]:
             _log_warn(f"Invalid bitrate '{bitrate_raw}', using {bitrate}")
         
         # Determine FD support
-        fd = fd_raw in ("true", "1", "yes", "on")
+        fd = fd_raw.lower() in ("true", "1", "yes", "on")
         
         # Check if backend supports FD
         supports_fd = backend in ("pcan", "socketcan", "vector", "kvaser")
-        supports_brs = supports_fd  # Bit Rate Switch support
         
         config = {
-            "backend": backend,
-            "channel": channel,
+            "can_interface": can_interface,  # Primary key used by service.py
             "bitrate": bitrate,
+            "backend": backend,
             "fd": fd,
             "supports_fd": supports_fd,
-            "supports_brs": supports_brs,
-            "raw": {
-                "backend_raw": backend_raw,
-                "interface_raw": interface_raw,
-                "bitrate_raw": bitrate_raw,
-                "fd_raw": fd_raw,
-                "vci_mode": vci_mode,
-            }
+            "channel": can_interface,  # Alias for backward compatibility
         }
         
         _log_debug(f"Resolved CAN config: {config}")
+        return config
         
     except Exception as e:
         _log_error(f"Error resolving CAN config: {e}")
-        config = {
-            "backend": DEFAULT_BACKEND,
-            "channel": DEFAULT_INTERFACE,
-            "bitrate": DEFAULT_BITRATE,
-            "fd": DEFAULT_FD,
-            "supports_fd": False,
-            "supports_brs": False,
-            "error": str(e),
-        }
-    
-    return config
+        _log_debug(traceback.format_exc())
+        return default_config.copy()  # Return copy to prevent modification
 
 
 def validate_can_config(config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -297,7 +288,7 @@ def validate_can_config(config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         (is_valid, error_message)
     """
     backend = config.get("backend", "").lower()
-    channel = config.get("channel", "")
+    channel = config.get("can_interface", config.get("channel", ""))
     bitrate = config.get("bitrate", 0)
     
     if not backend:
@@ -311,10 +302,6 @@ def validate_can_config(config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     
     if bitrate <= 0:
         return False, f"Invalid bitrate: {bitrate}"
-    
-    # Check for reserved channels in virtual mode
-    if backend == "virtual" and channel in ("can0", "can1", "PCAN_USBBUS1"):
-        _log_warn(f"Virtual backend using physical channel '{channel}' - this may cause conflicts")
     
     return True, None
 
@@ -352,7 +339,7 @@ def open_can_bus(
     base_config = get_can_config()
     
     # Override with provided parameters
-    channel = channel or base_config["channel"]
+    channel = channel or base_config["can_interface"]
     bitrate = bitrate or base_config["bitrate"]
     backend = backend or base_config["backend"]
     fd = fd if fd is not None else base_config["fd"]
@@ -360,7 +347,7 @@ def open_can_bus(
     # Validate
     test_config = {
         "backend": backend,
-        "channel": channel,
+        "can_interface": channel,
         "bitrate": bitrate,
         "fd": fd,
     }
@@ -425,7 +412,10 @@ def _open_bus_single(
     if backend == "pcan":
         # PCAN specific
         if not channel.startswith("PCAN_"):
-            channel = f"PCAN_USBBUS{channel}" if channel.isdigit() else channel
+            if channel.isdigit():
+                channel = f"PCAN_USBBUS{channel}"
+            else:
+                channel = f"PCAN_{channel}"
         
         kwargs = {
             "channel": channel,
@@ -454,9 +444,6 @@ def _open_bus_single(
             "bustype": "socketcan",  # Virtual uses socketcan type
             "bitrate": bitrate,
         }
-        
-        # Ensure virtual interface exists
-        _ensure_virtual_interface(channel)
     
     else:
         # Generic backend
@@ -470,58 +457,15 @@ def _open_bus_single(
     
     try:
         bus = interface.Bus(**kwargs)
-        
-        # Verify bus is actually working
-        try:
-            # Try to get bus info (non-critical)
-            bus_info = getattr(bus, "get_info", None)
-            if bus_info:
-                _log_debug(f"Bus info: {bus_info()}")
-        except:
-            pass
-        
         return bus
         
     except CanError as e:
         _log_error(f"CAN bus error: {e}")
-        raise
+        return None
     except Exception as e:
         _log_error(f"Unexpected error opening CAN bus: {e}")
         _log_debug(traceback.format_exc())
         return None
-
-
-def _ensure_virtual_interface(interface: str = "vcan0"):
-    """Ensure virtual CAN interface exists (Linux only)."""
-    if os.name != "posix":
-        return
-    
-    import subprocess
-    
-    try:
-        # Check if interface exists
-        result = subprocess.run(
-            ["ip", "link", "show", interface],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        
-        if result.returncode != 0:
-            # Create virtual interface
-            _log_info(f"Creating virtual CAN interface: {interface}")
-            subprocess.run(
-                ["sudo", "ip", "link", "add", "dev", interface, "type", "vcan"],
-                check=False,
-                timeout=5
-            )
-            subprocess.run(
-                ["sudo", "ip", "link", "set", "up", interface],
-                check=False,
-                timeout=2
-            )
-    except Exception as e:
-        _log_warn(f"Failed to ensure virtual interface: {e}")
 
 
 def close_can_bus(bus: Optional[Bus]) -> None:
@@ -594,8 +538,6 @@ def send_can_frame(
         True if successful, False otherwise
     """
     try:
-        from can import Message
-        
         # Validate data length
         max_len = 64 if getattr(bus, "fd", False) else 8
         if len(data) > max_len:
@@ -769,10 +711,6 @@ class CanSession:
             close_can_bus(self.bus)
             self.bus = None
             self._opened = False
-        
-        # Log any exception that occurred
-        if exc_type:
-            _log_debug(f"CAN session exiting with error: {exc_type.__name__}: {exc_val}")
 
     def is_active(self) -> bool:
         """Check if session is active and bus is online."""
@@ -923,7 +861,7 @@ def _init_can_utils():
     # Log current config
     try:
         config = get_can_config()
-        _log_info(f"Current config: {config['backend']}/{config['channel']} @ {config['bitrate']} bps")
+        _log_info(f"Current config: {config['backend']}/{config['can_interface']} @ {config['bitrate']} bps")
     except Exception as e:
         _log_warn(f"Could not load current config: {e}")
 
