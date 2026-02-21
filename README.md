@@ -260,3 +260,18 @@ WHERE updated_at IS NULL;
 UPDATE app.auto_run_results 
 SET source = 'section' 
 WHERE source IS NULL;
+
+
+-- Consider adding composite index for cleanup function
+CREATE INDEX IF NOT EXISTS idx_auto_run_sessions_cleanup2 
+ON app.auto_run_sessions(last_accessed, status) 
+WHERE status IN ('running', 'started');
+
+-- Consider index for ECU status cleanup
+CREATE INDEX IF NOT EXISTS idx_ecu_active_status_cleanup 
+ON app.ecu_active_status(session_id, updated_at);
+
+-- Consider partial index for active login sessions
+CREATE INDEX IF NOT EXISTS idx_user_login_sessions_active_only 
+ON app.user_login_sessions(last_activity) 
+WHERE is_active = true;
