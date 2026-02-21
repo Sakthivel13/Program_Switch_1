@@ -14,16 +14,6 @@ CAN IDs: 0x7F0 (req), 0x7F1 (resp)
 
 Version: 3.0.0
 Last Updated: 2026-02-21
-
-FIXES IN v3.0.0
-────────────────
-- FIX-51: Enhanced stream callback chain for persistence
-- FIX-62: Display pages support for battery voltage
-- FIX-64: Stream value persistence with ON CONFLICT
-- FIX-68: Proper generator function implementation
-- FIX-69: Stream heartbeat for stale detection
-- FIX-80: Improved CAN error handling with recovery
-- FIX-81: Multiple decode attempts per reading
 """
 
 from __future__ import annotations
@@ -32,7 +22,6 @@ import time
 import logging
 import traceback
 from typing import Dict, Any, Optional, Generator
-from datetime import datetime
 
 import can
 from can import BusABC, Message
@@ -272,11 +261,6 @@ def read_battery_voltage_stream(
 
     Yields runner-compatible dicts:
       {"status": "streaming", "data": {"battery_voltage": <float>}}
-
-    The runner will:
-      - Validate limits and emit progress_json
-      - Call service.on_stream_data() for persistence
-      - Display values in UI with color coding
     """
     bus = None
     iteration = 0
@@ -402,12 +386,29 @@ def read_battery_voltage_stream(
                 else:
                     time.sleep(READ_INTERVAL)
 
+            except GeneratorExit:
+                # Handle generator cleanup gracefully
+                _log_info("Stream generator closed", context)
+                break  # Exit the while loop
+                
+            except Exception as e:
+                _log_error(f"Stream error: {e}", context)
+                _log_debug(traceback.format_exc(), context)
+                yield {
+                    "status": "error", 
+                    "data": {"error": str(e)}
+                }
+                # Don't break - try to continue streaming
+                if context:
+                    context.sleep(READ_INTERVAL * 2)
+                else:
+                    time.sleep(READ_INTERVAL * 2)
+                
     except GeneratorExit:
-        # Handle generator cleanup gracefully
         _log_info("Stream generator closed", context)
         
     except Exception as e:
-        _log_error(f"Stream error: {e}", context)
+        _log_error(f"Fatal stream error: {e}", context)
         _log_debug(traceback.format_exc(), context)
         yield {
             "status": "error", 
