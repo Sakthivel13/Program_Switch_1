@@ -1,9 +1,8 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://nirixdiagnostics.com/schemas/ecu.schema.json",
   "title": "NIRIX ECU Tests Configuration",
   "description": "Schema for ECU test definitions including ECU-specific auto-run programs",
-  "version": "2.1.0",
   "type": "object",
   "required": [
     "schema_version",
@@ -11,23 +10,19 @@
     "ecus"
   ],
   "additionalProperties": false,
-
   "properties": {
     "schema_version": {
       "type": "string",
       "description": "Version of the schema used",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "default": "2.1.0",
-      "examples": ["2.0.0", "2.1.0"]
+      "pattern": "^\\d+\\.\\d+$",
+      "examples": ["1.0", "1.1", "2.0"]
     },
-
     "vehicle": {
       "type": "string",
       "description": "Name of the vehicle this configuration applies to",
       "minLength": 1,
       "maxLength": 100
     },
-
     "ecus": {
       "type": "array",
       "description": "List of ECU definitions for the vehicle",
@@ -39,7 +34,6 @@
           "ecu_name"
         ],
         "additionalProperties": false,
-
         "properties": {
           "ecu_code": {
             "type": "string",
@@ -47,81 +41,68 @@
             "pattern": "^[A-Za-z0-9_]+$",
             "minLength": 1,
             "maxLength": 50,
-            "examples": ["BMS", "ECM", "TCU", "ABS"]
+            "examples": ["BMS", "ECU", "TCU", "ABS"]
           },
-
           "ecu_name": {
             "type": "string",
             "description": "Display name for the ECU",
             "minLength": 1,
             "maxLength": 100,
-            "examples": ["Battery Management System", "Engine Control Module"]
+            "examples": ["Battery Management System", "Engine Control Unit"]
           },
-
           "description": {
             "type": "string",
             "description": "Detailed description of the ECU",
             "maxLength": 500
           },
-
           "protocol": {
             "type": "string",
             "description": "Communication protocol used by the ECU",
-            "enum": ["UDS", "CAN", "KWP2000", "J1939", "ISO14229", "OBDII", "None", "Custom"],
+            "enum": ["UDS", "CAN", "KWP2000", "J1939", "ISO14229", "OBDII", "None"],
             "default": "UDS"
           },
-
           "emission": {
             "type": "string",
             "description": "Emission standard compliance",
-            "enum": ["OBDII", "EOBD", "JOBD", "None", "EURO6", "EURO5", "BS6"],
+            "enum": ["OBDII", "EOBD", "JOBD", "None"],
             "default": "OBDII"
           },
-
           "icon": {
             "type": "string",
             "description": "Icon filename or FontAwesome class for the ECU",
             "maxLength": 100,
             "examples": ["icons/microchip.svg", "fa-microchip"]
           },
-
           "is_active": {
             "type": "boolean",
             "description": "Whether this ECU is currently active",
             "default": true
           },
-
           "sort_order": {
             "type": "integer",
             "description": "Order in which to display this ECU",
             "minimum": 0,
-            "maximum": 9999,
             "default": 0
           },
-
           "auto_run_programs": {
             "type": "array",
             "description": "ECU-specific auto-run programs that execute when ECU page loads",
             "items": {
-              "$ref": "#/$defs/autoRunProgram"
-            },
-            "default": []
+              "$ref": "#/definitions/autoRunProgram"
+            }
           },
-
           "parameters": {
             "type": "array",
             "description": "List of diagnostic parameters available for this ECU",
             "items": {
-              "$ref": "#/$defs/parameter"
-            },
-            "default": []
+              "$ref": "#/definitions/parameter"
+            }
           }
         }
       }
     }
   },
-
-  "$defs": {
+  "definitions": {
     "autoRunProgram": {
       "type": "object",
       "description": "Definition of an auto-run program that executes automatically",
@@ -133,7 +114,6 @@
         "function_name"
       ],
       "additionalProperties": false,
-
       "properties": {
         "program_id": {
           "type": "string",
@@ -143,7 +123,6 @@
           "maxLength": 100,
           "examples": ["AUTO_ECU_ACTIVE_CHECK", "AUTO_BATTERY_VOLTAGE"]
         },
-
         "program_name": {
           "type": "string",
           "description": "Display name for the auto-run program",
@@ -151,61 +130,53 @@
           "maxLength": 100,
           "examples": ["ECU Active Check", "Battery Voltage Monitor"]
         },
-
         "program_type": {
           "type": "string",
           "description": "Type of program execution",
           "enum": ["single", "stream"],
           "examples": ["single", "stream"]
         },
-
         "module_name": {
           "type": "string",
           "description": "Python module name containing the function",
-          "pattern": "^[a-z_][a-z0-9_]*$",
+          "pattern": "^[a-z_]+$",
           "minLength": 1,
           "maxLength": 100,
           "examples": ["ecu_active_check", "battery_voltage"]
         },
-
         "function_name": {
           "type": "string",
           "description": "Function name to call in the module",
-          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "pattern": "^[a-z_]+$",
           "minLength": 1,
           "maxLength": 100,
           "examples": ["check_ecu_active", "read_battery_voltage_stream"]
         },
-
         "execution_mode": {
           "type": "string",
           "description": "Execution mode (for backward compatibility)",
           "enum": ["single", "stream", "live", "flashing"],
           "default": "single"
         },
-
         "display_type": {
           "type": "string",
           "description": "How to display the result in UI",
-          "enum": ["text", "value", "status", "json", "gauge"],
+          "enum": ["text", "value", "status", "json"],
           "default": "text",
           "examples": ["status", "value", "text"]
         },
-
         "display_label": {
           "type": "string",
           "description": "Label to display before the value",
           "maxLength": 100,
           "examples": ["ECU Status", "Battery Voltage"]
         },
-
         "display_unit": {
           "type": ["string", "null"],
           "description": "Unit of measurement to display after the value",
           "maxLength": 20,
           "examples": ["V", "A", "°C", null]
         },
-
         "display_pages": {
           "type": "array",
           "description": "Pages where this program's results should be displayed",
@@ -213,172 +184,120 @@
             "type": "string",
             "enum": ["section", "ecu", "parameter"]
           },
-          "minItems": 0,
-          "maxItems": 3,
-          "uniqueItems": true,
-          "default": ["section", "ecu", "parameter"]
+          "default": ["section", "ecu", "parameter"],
+          "uniqueItems": true
         },
-
         "ecu_targets": {
           "type": "array",
           "description": "List of ECU codes this program targets",
           "items": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9_]+$",
-            "minLength": 1,
-            "maxLength": 50
+            "pattern": "^[A-Za-z0-9_]+$"
           },
           "default": []
         },
-
         "output_limits": {
           "type": "array",
           "description": "LSL/USL limits for output validation",
           "items": {
-            "$ref": "#/$defs/outputLimit"
-          },
-          "default": []
+            "$ref": "#/definitions/outputLimit"
+          }
         },
-
         "fallback_action": {
           "type": "string",
           "description": "Action to take if program fails",
           "enum": ["none", "manual_input", "warn_and_continue", "block"],
           "default": "none"
         },
-
         "fallback_input": {
-          "oneOf": [
-            { "$ref": "#/$defs/fallbackInput" },
-            { "type": "null" }
-          ],
-          "default": null,
-          "description": "Input specification for manual fallback"
+          "type": ["object", "null"],
+          "description": "Input specification for manual fallback",
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "Label for the input field"
+            },
+            "input_type": {
+              "type": "string",
+              "description": "Type of input",
+              "enum": ["string", "int", "float", "hex"]
+            },
+            "length": {
+              "type": "integer",
+              "description": "Required length for string/hex inputs",
+              "minimum": 1
+            },
+            "format_hint": {
+              "type": "string",
+              "description": "Hint text for the input format"
+            },
+            "is_required": {
+              "type": "boolean",
+              "description": "Whether input is required",
+              "default": true
+            }
+          }
         },
-
         "log_as_vin": {
           "type": "boolean",
           "description": "Whether this program's output should be treated as VIN",
           "default": false
         },
-
         "is_required": {
           "type": "boolean",
           "description": "Whether this program is required for navigation",
           "default": true
         },
-
         "timeout_sec": {
           "type": "integer",
           "description": "Timeout in seconds (0 for infinite for streams)",
           "minimum": 0,
-          "maximum": 3600,
           "default": 15
         },
-
         "sort_order": {
           "type": "integer",
           "description": "Execution order (lower numbers run first)",
           "minimum": 0,
-          "maximum": 9999,
           "default": 0
-        },
-
-        "source": {
-          "type": "string",
-          "enum": ["section", "ecu"],
-          "default": "ecu",
-          "description": "Source of the auto-run program (added by loader)"
         }
       }
     },
-
-    "fallbackInput": {
-      "type": "object",
-      "description": "Input specification for manual fallback",
-      "properties": {
-        "label": {
-          "type": "string",
-          "description": "Label for the input field",
-          "maxLength": 100
-        },
-        "input_type": {
-          "type": "string",
-          "description": "Type of input",
-          "enum": ["string", "int", "float", "hex"],
-          "default": "string"
-        },
-        "length": {
-          "type": "integer",
-          "description": "Required length for string/hex inputs",
-          "minimum": 1,
-          "maximum": 255
-        },
-        "format_hint": {
-          "type": "string",
-          "description": "Hint text for the input format",
-          "maxLength": 200
-        },
-        "is_required": {
-          "type": "boolean",
-          "description": "Whether input is required",
-          "default": true
-        },
-        "default_value": {
-          "type": ["string", "null"],
-          "description": "Default value for the input"
-        },
-        "validation_pattern": {
-          "type": ["string", "null"],
-          "description": "Regex pattern for input validation"
-        }
-      },
-      "additionalProperties": false
-    },
-
     "outputLimit": {
       "type": "object",
       "description": "LSL/USL limit definition for signal validation",
       "required": ["signal"],
       "additionalProperties": false,
-
       "properties": {
         "signal": {
           "type": "string",
           "description": "Name of the signal to validate",
-          "pattern": "^[a-zA-Z0-9_]+$",
           "minLength": 1,
           "maxLength": 100,
           "examples": ["battery_voltage", "engine_rpm", "is_active"]
         },
-
         "lsl": {
           "type": ["number", "null"],
           "description": "Lower Specification Limit",
           "examples": [10.0, 0, null]
         },
-
         "usl": {
           "type": ["number", "null"],
           "description": "Upper Specification Limit",
           "examples": [13.6, 100, null]
         },
-
         "unit": {
           "type": ["string", "null"],
           "description": "Unit of measurement",
           "maxLength": 20,
-          "examples": ["V", "rpm", "°C", null]
+          "examples": ["V", "rpm", null]
         }
       }
     },
-
     "parameter": {
       "type": "object",
       "description": "Diagnostic parameter definition",
       "required": ["parameter_code", "label"],
       "additionalProperties": false,
-
       "properties": {
         "parameter_code": {
           "type": "string",
@@ -388,7 +307,6 @@
           "maxLength": 100,
           "examples": ["LIVE_PARAMETER", "WRITE_DATA_IDENTIFIER", "DTC"]
         },
-
         "label": {
           "type": "string",
           "description": "Display label for the parameter",
@@ -396,35 +314,29 @@
           "maxLength": 100,
           "examples": ["Live Parameters", "Write Data Identifier"]
         },
-
         "description": {
           "type": "string",
           "description": "Detailed description of the parameter",
           "maxLength": 500
         },
-
         "icon": {
           "type": "string",
           "description": "Icon filename or FontAwesome class",
           "maxLength": 100,
           "examples": ["icons/wave-square.svg", "fa-edit"]
         },
-
         "execution_class": {
           "type": "string",
           "description": "Execution class for tests under this parameter",
           "enum": ["SINGLE", "STREAM", "FLASH", "DUAL"],
           "default": "SINGLE"
         },
-
         "sort_order": {
           "type": "integer",
           "description": "Display order for the parameter",
           "minimum": 0,
-          "maximum": 9999,
           "default": 0
         },
-
         "is_active": {
           "type": "boolean",
           "description": "Whether this parameter is currently active",
