@@ -1,56 +1,113 @@
 1-Table_name : 'auto_run_results'
 
-"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
-"app"	"auto_run_results"	"created_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
-"app"	"auto_run_results"	"error_message"	"text"	"YES"			
-"app"	"auto_run_results"	"id"	"integer"	"NO"	"nextval('app.auto_run_results_id_seq'::regclass)"	"PRIMARY KEY: auto_run_results_pkey | auto_run_results_id_not_null"	"auto_run_results_pkey"
-"app"	"auto_run_results"	"log_as_vin"	"boolean"	"NO"	"false"	"auto_run_results_log_as_vin_not_null"	
-"app"	"auto_run_results"	"manual_input"	"boolean"	"YES"	"false"		
-"app"	"auto_run_results"	"passed"	"boolean"	"YES"			
-"app"	"auto_run_results"	"program_id"	"character varying(100)"	"NO"		"auto_run_results_program_id_not_null"	"idx_auto_run_results_program | uq_auto_run_results_session_program | uq_auto_run_session_program"
-"app"	"auto_run_results"	"program_name"	"character varying(255)"	"YES"			
-"app"	"auto_run_results"	"program_type"	"character varying(20)"	"NO"	"'single'::character varying"	"CHECK: auto_run_results_type_check (CHECK (program_type::text = | auto_run_results_program_type_not_null"	
-"app"	"auto_run_results"	"result_data"	"jsonb"	"YES"			
-"app"	"auto_run_results"	"result_value"	"text"	"YES"			
-"app"	"auto_run_results"	"session_id"	"character varying(100)"	"NO"		"FOREIGN KEY: auto_run_results_session_id_fkey -> FOREIGN KEY (s | auto_run_results_session_id_not_null"	"idx_auto_run_results_session | uq_auto_run_results_session_program | uq_auto_run_session_program"
-"app"	"auto_run_results"	"source"	"text"	"YES"	"'section'::text"		"idx_auto_run_results_source"
-"app"	"auto_run_results"	"status"	"character varying(20)"	"NO"	"'pending'::character varying"	"CHECK: auto_run_results_status_check (CHECK (status::text = ANY | auto_run_results_status_not_null"	
-"app"	"auto_run_results"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
-"app"	"auto_run_results"	"user_id"	"integer"	"YES"			
-"app"	"auto_run_results"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: auto_run_results_vehicle_id_fkey -> FOREIGN KEY (v | auto_run_results_vehicle_id_not_null"	"idx_auto_run_results_session | uq_auto_run_session_program"
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraint_name"	"constraint_type"	"index_name"	"is_unique"	"is_primary"
+"app"	"auto_run_results"	"id"	"integer"	false	"nextval('app.auto_run_results_id_seq'::regclass)"	"auto_run_results_id_not_null"	"n"	"auto_run_results_pkey"	true	true
+"app"	"auto_run_results"	"id"	"integer"	false	"nextval('app.auto_run_results_id_seq'::regclass)"	"auto_run_results_pkey"	"p"	"auto_run_results_pkey"	true	true
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"auto_run_results_session_id_not_null"	"n"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"auto_run_results_session_id_not_null"	"n"	"idx_auto_run_results_session"	false	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"auto_run_results_session_id_not_null"	"n"	"uq_auto_run_results_session_program"	true	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"auto_run_results_session_id_fkey"	"f"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"auto_run_results_session_id_fkey"	"f"	"idx_auto_run_results_session"	false	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"auto_run_results_session_id_fkey"	"f"	"uq_auto_run_results_session_program"	true	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"uq_auto_run_results_session_program"	"u"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"uq_auto_run_results_session_program"	"u"	"idx_auto_run_results_session"	false	false
+"app"	"auto_run_results"	"session_id"	"character varying(100)"	false		"uq_auto_run_results_session_program"	"u"	"uq_auto_run_results_session_program"	true	false
+"app"	"auto_run_results"	"vehicle_id"	"integer"	false		"auto_run_results_vehicle_id_not_null"	"n"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"vehicle_id"	"integer"	false		"auto_run_results_vehicle_id_not_null"	"n"	"idx_auto_run_results_session"	false	false
+"app"	"auto_run_results"	"vehicle_id"	"integer"	false		"auto_run_results_vehicle_id_fkey"	"f"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"vehicle_id"	"integer"	false		"auto_run_results_vehicle_id_fkey"	"f"	"idx_auto_run_results_session"	false	false
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	false		"auto_run_results_program_id_not_null"	"n"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	false		"auto_run_results_program_id_not_null"	"n"	"idx_auto_run_results_program"	false	false
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	false		"auto_run_results_program_id_not_null"	"n"	"uq_auto_run_results_session_program"	true	false
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	false		"uq_auto_run_results_session_program"	"u"	"uq_auto_run_session_program"	true	false
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	false		"uq_auto_run_results_session_program"	"u"	"idx_auto_run_results_program"	false	false
+"app"	"auto_run_results"	"program_id"	"character varying(100)"	false		"uq_auto_run_results_session_program"	"u"	"uq_auto_run_results_session_program"	true	false
+"app"	"auto_run_results"	"program_type"	"character varying(20)"	false	"'single'::character varying"	"auto_run_results_type_check"	"c"			
+"app"	"auto_run_results"	"program_type"	"character varying(20)"	false	"'single'::character varying"	"auto_run_results_program_type_not_null"	"n"			
+"app"	"auto_run_results"	"status"	"character varying(20)"	false	"'pending'::character varying"	"auto_run_results_status_check"	"c"			
+"app"	"auto_run_results"	"status"	"character varying(20)"	false	"'pending'::character varying"	"auto_run_results_status_not_null"	"n"			
+"app"	"auto_run_results"	"result_value"	"text"	true						
+"app"	"auto_run_results"	"result_data"	"jsonb"	true						
+"app"	"auto_run_results"	"manual_input"	"boolean"	true	"false"					
+"app"	"auto_run_results"	"error_message"	"text"	true						
+"app"	"auto_run_results"	"created_at"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"					
+"app"	"auto_run_results"	"updated_at"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"					
+"app"	"auto_run_results"	"user_id"	"integer"	true		"auto_run_results_user_id_fkey"	"f"			
+"app"	"auto_run_results"	"log_as_vin"	"boolean"	false	"false"	"auto_run_results_log_as_vin_not_null"	"n"			
+"app"	"auto_run_results"	"program_name"	"character varying(255)"	true						
+"app"	"auto_run_results"	"passed"	"boolean"	true						
+"app"	"auto_run_results"	"source"	"text"	true	"'section'::text"			"idx_auto_run_results_source"	false	false
 
 
 2-Table_name : 'auto_run_sessions'
 
-"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
-"app"	"auto_run_sessions"	"ended_at"	"timestamp without time zone"	"YES"			
-"app"	"auto_run_sessions"	"id"	"integer"	"NO"	"nextval('app.auto_run_sessions_id_seq'::regclass)"	"PRIMARY KEY: auto_run_sessions_pkey | auto_run_sessions_id_not_null"	"auto_run_sessions_pkey"
-"app"	"auto_run_sessions"	"programs_config"	"jsonb"	"YES"			
-"app"	"auto_run_sessions"	"section_type"	"character varying(30)"	"NO"	"'diagnostics'::character varying"	"auto_run_sessions_section_type_not_null"	
-"app"	"auto_run_sessions"	"session_id"	"character varying(100)"	"NO"		"UNIQUE: auto_run_sessions_session_id_key | auto_run_sessions_session_id_not_null"	"auto_run_sessions_session_id_key"
-"app"	"auto_run_sessions"	"started_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
-"app"	"auto_run_sessions"	"status"	"character varying(20)"	"NO"	"'started'::character varying"	"CHECK: auto_run_sessions_status_check (CHECK (status::text = AN | auto_run_sessions_status_not_null"	"idx_auto_run_sessions_status | idx_auto_run_sessions_vehicle"
-"app"	"auto_run_sessions"	"user_id"	"integer"	"YES"		"FOREIGN KEY: auto_run_sessions_user_id_fkey -> FOREIGN KEY (use"	"idx_auto_run_sessions_user"
-"app"	"auto_run_sessions"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: auto_run_sessions_vehicle_id_fkey -> FOREIGN KEY ( | auto_run_sessions_vehicle_id_not_null"	"idx_auto_run_sessions_vehicle"
-"app"	"auto_run_sessions"	"vehicle_name"	"character varying(255)"	"NO"		"auto_run_sessions_vehicle_name_not_null"	
-"app"	"auto_run_sessions"	"vin"	"character varying(50)"	"YES"			"idx_auto_run_sessions_vin"
-"app"	"auto_run_sessions"	"vin_input_needed"	"boolean"	"YES"	"false"		
-"app"	"auto_run_sessions"	"vin_source"	"character varying(20)"	"YES"	"'none'::character varying"	"CHECK: auto_run_sessions_vin_source_check (CHECK (vin_source::t"	
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraint_name"	"constraint_type"	"index_name"	"is_unique"	"is_primary"
+"app"	"auto_run_sessions"	"id"	"integer"	false	"nextval('app.auto_run_sessions_id_seq'::regclass)"	"auto_run_sessions_id_not_null"	"n"	"auto_run_sessions_pkey"	true	true
+"app"	"auto_run_sessions"	"id"	"integer"	false	"nextval('app.auto_run_sessions_id_seq'::regclass)"	"auto_run_sessions_pkey"	"p"	"auto_run_sessions_pkey"	true	true
+"app"	"auto_run_sessions"	"session_id"	"character varying(100)"	false		"auto_run_sessions_session_id_not_null"	"n"	"auto_run_sessions_session_id_key"	true	false
+"app"	"auto_run_sessions"	"session_id"	"character varying(100)"	false		"auto_run_sessions_session_id_key"	"u"	"auto_run_sessions_session_id_key"	true	false
+"app"	"auto_run_sessions"	"vehicle_id"	"integer"	false		"auto_run_sessions_vehicle_id_not_null"	"n"	"idx_auto_run_sessions_vehicle"	false	false
+"app"	"auto_run_sessions"	"vehicle_id"	"integer"	false		"auto_run_sessions_vehicle_id_fkey"	"f"	"idx_auto_run_sessions_vehicle"	false	false
+"app"	"auto_run_sessions"	"user_id"	"integer"	true		"auto_run_sessions_user_id_fkey"	"f"	"idx_auto_run_sessions_user"	false	false
+"app"	"auto_run_sessions"	"user_id"	"integer"	true		"auto_run_sessions_user_id_fkey"	"f"	"idx_auto_run_sessions_user_login"	false	false
+"app"	"auto_run_sessions"	"vehicle_name"	"character varying(255)"	false		"auto_run_sessions_vehicle_name_not_null"	"n"			
+"app"	"auto_run_sessions"	"section_type"	"character varying(30)"	false	"'diagnostics'::character varying"	"auto_run_sessions_section_type_not_null"	"n"			
+"app"	"auto_run_sessions"	"vin"	"character varying(50)"	true				"idx_auto_run_sessions_vin"	false	false
+"app"	"auto_run_sessions"	"vin_source"	"character varying(20)"	true	"'none'::character varying"	"auto_run_sessions_vin_source_check"	"c"			
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_not_null"	"n"	"idx_auto_run_sessions_vehicle"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_not_null"	"n"	"idx_auto_run_sessions_status"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_not_null"	"n"	"idx_auto_run_sessions_cleanup"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_not_null"	"n"	"idx_auto_run_sessions_cleanup2"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_check"	"c"	"idx_auto_run_sessions_vehicle"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_check"	"c"	"idx_auto_run_sessions_status"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_check"	"c"	"idx_auto_run_sessions_cleanup"	false	false
+"app"	"auto_run_sessions"	"status"	"character varying(20)"	false	"'started'::character varying"	"auto_run_sessions_status_check"	"c"	"idx_auto_run_sessions_cleanup2"	false	false
+"app"	"auto_run_sessions"	"programs_config"	"jsonb"	true						
+"app"	"auto_run_sessions"	"started_at"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"					
+"app"	"auto_run_sessions"	"ended_at"	"timestamp without time zone"	true						
+"app"	"auto_run_sessions"	"vin_input_needed"	"boolean"	true	"false"					
+"app"	"auto_run_sessions"	"user_login_id"	"uuid"	true				"idx_auto_run_sessions_user_login"	false	false
+"app"	"auto_run_sessions"	"last_accessed"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"			"idx_auto_run_sessions_cleanup"	false	false
+"app"	"auto_run_sessions"	"last_accessed"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"			"idx_auto_run_sessions_cleanup2"	false	false
+"app"	"auto_run_sessions"	"updated_at"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"			"idx_auto_run_sessions_updated"	false	false
 
 3-Table_name : 'auto_run_stream_values'
 
-"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
-"app"	"auto_run_stream_values"	"id"	"integer"	"NO"	"nextval('app.auto_run_stream_values_id_seq'::regclass)"	"PRIMARY KEY: auto_run_stream_values_pkey | auto_run_stream_values_id_not_null"	"auto_run_stream_values_pkey"
-"app"	"auto_run_stream_values"	"is_within_limit"	"boolean"	"YES"	"true"		
-"app"	"auto_run_stream_values"	"lsl"	"numeric"	"YES"			
-"app"	"auto_run_stream_values"	"program_id"	"character varying(100)"	"NO"		"auto_run_stream_values_program_id_not_null"	"uq_stream_session_signal"
-"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	"NO"		"FOREIGN KEY: auto_run_stream_values_session_id_fkey -> FOREIGN  | auto_run_stream_values_session_id_not_null"	"idx_auto_run_stream_values_session | idx_auto_run_stream_values_session_signal | idx_stream_values_session | uq_stream_session_signal"
-"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	"NO"		"auto_run_stream_values_signal_name_not_null"	"idx_auto_run_stream_values_session_signal | uq_stream_session_signal"
-"app"	"auto_run_stream_values"	"signal_unit"	"character varying(20)"	"YES"			
-"app"	"auto_run_stream_values"	"signal_value"	"numeric"	"YES"			
-"app"	"auto_run_stream_values"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		"idx_auto_run_stream_values_updated"
-"app"	"auto_run_stream_values"	"usl"	"numeric"	"YES"			
-"app"	"auto_run_stream_values"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: auto_run_stream_values_vehicle_id_fkey -> FOREIGN  | auto_run_stream_values_vehicle_id_not_null"	"idx_stream_values_session | uq_stream_session_signal"
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraint_name"	"constraint_type"	"index_name"	"is_unique"	"is_primary"
+"app"	"auto_run_stream_values"	"id"	"integer"	false	"nextval('app.auto_run_stream_values_id_seq'::regclass)"	"auto_run_stream_values_id_not_null"	"n"	"auto_run_stream_values_pkey"	true	true
+"app"	"auto_run_stream_values"	"id"	"integer"	false	"nextval('app.auto_run_stream_values_id_seq'::regclass)"	"auto_run_stream_values_pkey"	"p"	"auto_run_stream_values_pkey"	true	true
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_not_null"	"n"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_not_null"	"n"	"idx_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_not_null"	"n"	"idx_auto_run_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_not_null"	"n"	"idx_auto_run_stream_values_session_signal"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_not_null"	"n"	"uq_auto_run_stream_values_session_signal"	true	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_fkey"	"f"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_fkey"	"f"	"idx_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_fkey"	"f"	"idx_auto_run_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_fkey"	"f"	"idx_auto_run_stream_values_session_signal"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"auto_run_stream_values_session_id_fkey"	"f"	"uq_auto_run_stream_values_session_signal"	true	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"idx_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"idx_auto_run_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"idx_auto_run_stream_values_session_signal"	false	false
+"app"	"auto_run_stream_values"	"session_id"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"uq_auto_run_stream_values_session_signal"	true	false
+"app"	"auto_run_stream_values"	"vehicle_id"	"integer"	false		"auto_run_stream_values_vehicle_id_not_null"	"n"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"vehicle_id"	"integer"	false		"auto_run_stream_values_vehicle_id_not_null"	"n"	"idx_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"vehicle_id"	"integer"	false		"auto_run_stream_values_vehicle_id_fkey"	"f"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"vehicle_id"	"integer"	false		"auto_run_stream_values_vehicle_id_fkey"	"f"	"idx_stream_values_session"	false	false
+"app"	"auto_run_stream_values"	"program_id"	"character varying(100)"	false		"auto_run_stream_values_program_id_not_null"	"n"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	false		"auto_run_stream_values_signal_name_not_null"	"n"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	false		"auto_run_stream_values_signal_name_not_null"	"n"	"idx_auto_run_stream_values_session_signal"	false	false
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	false		"auto_run_stream_values_signal_name_not_null"	"n"	"uq_auto_run_stream_values_session_signal"	true	false
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"uq_stream_session_signal"	true	false
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"idx_auto_run_stream_values_session_signal"	false	false
+"app"	"auto_run_stream_values"	"signal_name"	"character varying(100)"	false		"uq_auto_run_stream_values_session_signal"	"u"	"uq_auto_run_stream_values_session_signal"	true	false
+"app"	"auto_run_stream_values"	"signal_value"	"numeric"	true						
+"app"	"auto_run_stream_values"	"signal_unit"	"character varying(20)"	true						
+"app"	"auto_run_stream_values"	"lsl"	"numeric"	true						
+"app"	"auto_run_stream_values"	"usl"	"numeric"	true						
+"app"	"auto_run_stream_values"	"is_within_limit"	"boolean"	true	"true"					
+"app"	"auto_run_stream_values"	"updated_at"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"			"idx_auto_run_stream_values_updated"	false	false
 
 4-Table_name : 'config'
 
@@ -105,15 +162,51 @@
 
 8-Table_name : 'ecu_active_status'
 
-"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraints"	"indexes"
-"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	"NO"		"UNIQUE: uq_ecu_active_session_ecu | UNIQUE: uq_ecu_status_session | UNIQUE: uq_ecu_status_session_old | ecu_active_status_ecu_code_not_null"	"idx_ecu_active_status_ecu | idx_ecu_active_status_session_ecu | uq_ecu_active_session_ecu | uq_ecu_status_session | uq_ecu_status_session_old"
-"app"	"ecu_active_status"	"error_count"	"integer"	"YES"	"0"		
-"app"	"ecu_active_status"	"id"	"integer"	"NO"	"nextval('app.ecu_active_status_id_seq'::regclass)"	"PRIMARY KEY: ecu_active_status_pkey | ecu_active_status_id_not_null"	"ecu_active_status_pkey"
-"app"	"ecu_active_status"	"is_active"	"boolean"	"YES"	"false"		
-"app"	"ecu_active_status"	"last_response"	"timestamp without time zone"	"YES"			
-"app"	"ecu_active_status"	"session_id"	"character varying(100)"	"NO"		"FOREIGN KEY: ecu_active_status_session_id_fkey -> FOREIGN KEY ( | UNIQUE: uq_ecu_active_session_ecu | UNIQUE: uq_ecu_status_session | UNIQUE: uq_ecu_status_session_old | ecu_active_status_session_id_not_null"	"idx_ecu_active_status_session | idx_ecu_active_status_session_ecu | idx_ecu_status_session | uq_ecu_active_session_ecu | uq_ecu_status_session | uq_ecu_status_session_old"
-"app"	"ecu_active_status"	"updated_at"	"timestamp without time zone"	"YES"	"CURRENT_TIMESTAMP"		
-"app"	"ecu_active_status"	"vehicle_id"	"integer"	"NO"		"FOREIGN KEY: ecu_active_status_vehicle_id_fkey -> FOREIGN KEY ( | UNIQUE: uq_ecu_status_session | UNIQUE: uq_ecu_status_session_old | ecu_active_status_vehicle_id_not_null"	"idx_ecu_status_session | uq_ecu_status_session | uq_ecu_status_session_old"
+"schema_name"	"table_name"	"column_name"	"data_type"	"is_nullable"	"column_default"	"constraint_name"	"constraint_type"	"index_name"	"is_unique"	"is_primary"
+"app"	"ecu_active_status"	"id"	"integer"	false	"nextval('app.ecu_active_status_id_seq'::regclass)"	"ecu_active_status_id_not_null"	"n"	"ecu_active_status_pkey"	true	true
+"app"	"ecu_active_status"	"id"	"integer"	false	"nextval('app.ecu_active_status_id_seq'::regclass)"	"ecu_active_status_pkey"	"p"	"ecu_active_status_pkey"	true	true
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_not_null"	"n"	"idx_ecu_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_not_null"	"n"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_not_null"	"n"	"idx_ecu_active_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_not_null"	"n"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_not_null"	"n"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_not_null"	"n"	"idx_ecu_active_status_cleanup"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_fkey"	"f"	"idx_ecu_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_fkey"	"f"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_fkey"	"f"	"idx_ecu_active_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_fkey"	"f"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_fkey"	"f"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"ecu_active_status_session_id_fkey"	"f"	"idx_ecu_active_status_cleanup"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_session_ecu"	"u"	"idx_ecu_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_session_ecu"	"u"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_session_ecu"	"u"	"idx_ecu_active_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_session_ecu"	"u"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_session_ecu"	"u"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_session_ecu"	"u"	"idx_ecu_active_status_cleanup"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_status_session_ecu"	"u"	"idx_ecu_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_status_session_ecu"	"u"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_status_session_ecu"	"u"	"idx_ecu_active_status_session"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_status_session_ecu"	"u"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_status_session_ecu"	"u"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"session_id"	"character varying(100)"	false		"uq_ecu_active_status_session_ecu"	"u"	"idx_ecu_active_status_cleanup"	false	false
+"app"	"ecu_active_status"	"vehicle_id"	"integer"	false		"ecu_active_status_vehicle_id_not_null"	"n"	"idx_ecu_status_session"	false	false
+"app"	"ecu_active_status"	"vehicle_id"	"integer"	false		"ecu_active_status_vehicle_id_fkey"	"f"	"idx_ecu_status_session"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"ecu_active_status_ecu_code_not_null"	"n"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"ecu_active_status_ecu_code_not_null"	"n"	"idx_ecu_active_status_ecu"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"ecu_active_status_ecu_code_not_null"	"n"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"ecu_active_status_ecu_code_not_null"	"n"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_session_ecu"	"u"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_session_ecu"	"u"	"idx_ecu_active_status_ecu"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_session_ecu"	"u"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_session_ecu"	"u"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_status_session_ecu"	"u"	"uq_ecu_active_session_ecu"	true	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_status_session_ecu"	"u"	"idx_ecu_active_status_ecu"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_status_session_ecu"	"u"	"idx_ecu_active_status_session_ecu"	false	false
+"app"	"ecu_active_status"	"ecu_code"	"character varying(50)"	false		"uq_ecu_active_status_session_ecu"	"u"	"uq_ecu_active_status_session_ecu"	true	false
+"app"	"ecu_active_status"	"is_active"	"boolean"	true	"false"					
+"app"	"ecu_active_status"	"last_response"	"timestamp without time zone"	true						
+"app"	"ecu_active_status"	"error_count"	"integer"	true	"0"					
+"app"	"ecu_active_status"	"updated_at"	"timestamp without time zone"	true	"CURRENT_TIMESTAMP"			"idx_ecu_active_status_cleanup"	false	false
 
 9-Table_name : 'live_system_track'
 
@@ -428,4 +521,5 @@
 "app"	"vehicles"	"is_active"	"boolean"	"NO"	"true"	"vehicles_is_active_not_null"	
 "app"	"vehicles"	"is_deleted"	"boolean"	"NO"	"false"	"vehicles_is_deleted_not_null"	
 "app"	"vehicles"	"name"	"character varying(255)"	"NO"		"UNIQUE: uq_vehicles_name | UNIQUE: vehicles_name_key | vehicles_name_not_null"	"uq_vehicles_name | vehicles_name_key"
+
 "app"	"vehicles"	"vin_pattern"	"character varying(32)"	"YES"			
