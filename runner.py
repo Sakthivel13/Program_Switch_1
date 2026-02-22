@@ -3,22 +3,16 @@
 DIAGNOSTIC TEST EXECUTION RUNNER (PRODUCTION – DB-AWARE, DB-AGNOSTIC)
 FULLY INTEGRATED WITH UPDATED LOADER AND SERVICE
 
-Version: 3.7.0
-Last Updated: 2026-02-20
+Version: 3.6.0
+Last Updated: 2026-02-17
 
-FIXES IN v3.7.0
+FIXES IN v3.6.0
 ────────────────
 - FIX-50: Support for ECU-level auto-run programs (from ecu_tests.json)
 - FIX-51: Enhanced stream callback chain for Battery Voltage
 - FIX-52: ECU status persistence for colored dots in UI
 - FIX-53: Proper handling of display_pages for VIN and Battery Voltage
 - FIX-54: Manual VIN input integration with session management
-- FIX-60: Source tracking for auto-run programs (section vs ecu)
-- FIX-61: Enhanced output limit validation with proper type handling
-- FIX-62: Stream value persistence with proper error recovery
-- FIX-63: Generator function detection and validation
-- FIX-64: Stream timeout handling (0 = infinite, but with heartbeat)
-- FIX-65: Multiple ECU status extraction from various formats
 """
 
 from __future__ import annotations
@@ -33,12 +27,11 @@ import traceback
 import contextlib
 import inspect
 import random
-import logging
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import (
     Any, Callable, Optional, Dict, List, Tuple,
-    Set, TypeVar, Generator, Union
+    Set, TypeVar, Generator
 )
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -64,8 +57,6 @@ DEFAULT_RETRY_DELAY_SEC = 1.5
 # Streaming behavior
 STREAM_POLL_INTERVAL_SEC = 0.5
 STREAM_NO_TIMEOUT = 0  # 0 means no timeout for streams
-STREAM_HEARTBEAT_INTERVAL_SEC = 5  # Send heartbeat every 5 seconds
-STREAM_MAX_IDLE_SEC = 30  # Max idle time before considering stream dead
 
 # Batch behavior
 BATCH_FUTURE_TIMEOUT_SEC = 300  # cap to avoid indefinite hang in parallel mode
@@ -73,6 +64,8 @@ BATCH_FUTURE_TIMEOUT_SEC = 300  # cap to avoid indefinite hang in parallel mode
 # =============================================================================
 # LOGGING
 # =============================================================================
+
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +83,7 @@ def _log_error(message: str):
 
 
 def _log_debug(message: str):
-    if DEBUG_MODE:
-        logger.debug(f"[RUNNER] {message}")
+    logger.debug(f"[RUNNER] {message}")
 
 
 # =============================================================================
@@ -101,7 +93,6 @@ def _log_debug(message: str):
 ProgressCallback = Optional[Callable[[str, int, str], None]]
 ResultCallback = Optional[Callable[[Dict[str, Any]], None]]
 StreamCallback = Optional[Callable[[str, Dict[str, Any]], None]]
-HeartbeatCallback = Optional[Callable[[str], None]]
 
 T = TypeVar('T')
 
@@ -119,7 +110,6 @@ class TaskStatus(Enum):
     CANCELLED = "CANCELLED"
     TIMEOUT = "TIMEOUT"
     ERROR = "ERROR"
-    STREAMING = "STREAMING"  # New status for active streams
 
 
 class ExecutionMode(Enum):
@@ -247,11 +237,6 @@ class ExecutionError(Exception):
     pass
 
 
-class StreamNotGeneratorError(Exception):
-    """Raised when a stream function is not a generator."""
-    pass
-
-
 # =============================================================================
 # EXECUTION CONTEXT
 # =============================================================================
@@ -272,7 +257,6 @@ class ExecutionContext:
     output_limits: List[Dict[str, Any]] = field(default_factory=list)
     persist_result: ResultCallback = None
     stream_callback: StreamCallback = None
-    heartbeat_callback: HeartbeatCallback = None
     retry_on_timeout: bool = False
     retry_on_exception: bool = False
     supports_run_all: bool = True
@@ -309,7 +293,6 @@ class TaskLogStream:
         self._lock = threading.RLock()
         self._logs: Dict[str, List[str]] = {}
         self._timestamps: Dict[str, float] = {}
-        self._last_access: Dict[str, float] = {}
         self._max_lines = max_lines
 
     def append(self, task_id: str, message: str, level: str = "INFO"):
@@ -323,7 +306,6 @@ class TaskLogStream:
                 self._logs[task_id] = []
             self._logs[task_id].append(line)
             self._timestamps[task_id] = time.time()
-            self._last_access[task_id] = time.time()
             # Enforce max lines
             if len(self._logs[task_id]) > self._max_lines:
                 self._logs[task_id] = self._logs[task_id][-self._max_lines:]
@@ -331,22 +313,16 @@ class TaskLogStream:
     def get(self, task_id: str) -> str:
         """Get all logs for a task as a single string."""
         with self._lock:
-            if task_id in self._last_access:
-                self._last_access[task_id] = time.time()
             return "\n".join(self._logs.get(task_id, []))
 
     def get_lines(self, task_id: str) -> List[str]:
         """Get all log lines for a task."""
         with self._lock:
-            if task_id in self._last_access:
-                self._last_access[task_id] = time.time()
             return list(self._logs.get(task_id, []))
 
     def get_new_lines(self, task_id: str, from_index: int) -> Tuple[List[str], int]:
         """Get new log lines since a given index."""
         with self._lock:
-            if task_id in self._last_access:
-                self._last_access[task_id] = time.time()
             lines = self._logs.get(task_id, [])
             return lines[from_index:], len(lines)
 
@@ -355,7 +331,6 @@ class TaskLogStream:
         with self._lock:
             self._logs.pop(task_id, None)
             self._timestamps.pop(task_id, None)
-            self._last_access.pop(task_id, None)
 
     def cleanup_old(self, max_age_sec: float = TASK_RETENTION_SEC) -> int:
         """Remove logs older than max_age_sec."""
@@ -365,7 +340,6 @@ class TaskLogStream:
             for tid in expired:
                 self._logs.pop(tid, None)
                 self._timestamps.pop(tid, None)
-                self._last_access.pop(tid, None)
         return len(expired)
 
     def get_stats(self) -> Dict[str, int]:
@@ -413,20 +387,16 @@ class TaskContext:
         cancel_event: threading.Event,
         pause_event: threading.Event,
         progress_cb: ProgressCallback,
-        heartbeat_cb: HeartbeatCallback = None,
         execution_mode: ExecutionMode = ExecutionMode.SINGLE,
     ):
         self._task_id = task_id
         self._cancel_event = cancel_event
         self._pause_event = pause_event
         self._progress_cb = progress_cb
-        self._heartbeat_cb = heartbeat_cb
         self._execution_mode = execution_mode
         self._start_time = time.monotonic()
         self._last_progress = 0
         self._checkpoint_count = 0
-        self._last_heartbeat = time.monotonic()
-        self._heartbeat_interval = STREAM_HEARTBEAT_INTERVAL_SEC
 
     @property
     def task_id(self) -> str:
@@ -471,17 +441,6 @@ class TaskContext:
     def checkpoint(self):
         """Check for pause/cancel at a safe point."""
         self._checkpoint_count += 1
-        
-        # Send heartbeat for long-running streams
-        if self.is_streaming and self._heartbeat_cb:
-            now = time.monotonic()
-            if now - self._last_heartbeat > self._heartbeat_interval:
-                try:
-                    self._heartbeat_cb(self._task_id)
-                    self._last_heartbeat = now
-                except Exception as e:
-                    _LOG_STREAM.append(self._task_id, f"Heartbeat error: {e}", "WARN")
-        
         # Block while paused, but remain responsive to cancellation
         while not self._pause_event.is_set():
             if self._cancel_event.is_set():
@@ -631,10 +590,6 @@ def validate_stream_limits(
     limits_map = {lim["signal"]: lim for lim in limits if "signal" in lim}
 
     for signal_name, raw_value in data.items():
-        # Skip internal keys
-        if signal_name.startswith("_"):
-            continue
-            
         num_value = _to_number(raw_value)
         if num_value is None:
             continue
@@ -695,31 +650,8 @@ def get_function_accepted_kwargs(fn: Callable) -> Tuple[Set[str], bool]:
 
 
 def _is_generator_function(fn: Callable) -> bool:
-    """
-    Check if a function is a generator function (def ...: yield).
-    Also checks if it's a callable that returns a generator.
-    """
-    if inspect.isgeneratorfunction(fn):
-        return True
-    
-    # Check if it's a class with __call__ that returns generator
-    if hasattr(fn, '__call__'):
-        if inspect.isgeneratorfunction(fn.__call__):
-            return True
-    
-    return False
-
-
-def _validate_stream_function(fn: Callable, test_id: str) -> bool:
-    """Validate that a stream function is actually a generator."""
-    is_gen = _is_generator_function(fn)
-    if not is_gen:
-        _LOG_STREAM.append(
-            "SYSTEM",
-            f"WARNING: Test {test_id} configured as stream but function {fn.__name__} is not a generator!",
-            "ERROR"
-        )
-    return is_gen
+    """Check if a function is a generator function (def ...: yield)."""
+    return inspect.isgeneratorfunction(fn)
 
 
 # =============================================================================
@@ -741,7 +673,6 @@ class TaskResult:
     status: TaskStatus = TaskStatus.COMPLETED
     # Optional machine-readable result code (e.g., LIMIT_VIOLATION)
     result_code: Optional[str] = None
-    stream_iterations: int = 0  # Track number of stream iterations
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -757,7 +688,6 @@ class TaskResult:
             "diag_error": self.diag_error,
             "status": self.status.value,
             "result_code": self.result_code,
-            "stream_iterations": self.stream_iterations,
         }
 
 
@@ -800,7 +730,6 @@ def _execute_function(
                 cancel_event=cancel_event,
                 pause_event=pause_event,
                 progress_cb=progress_cb,
-                heartbeat_cb=ctx.heartbeat_callback,
                 execution_mode=execution_mode,
             )
 
@@ -811,7 +740,7 @@ def _execute_function(
             if "context" in accepted_params or accepts_var_kwargs:
                 call_kwargs["context"] = context
 
-            # Always inject 'progress' if accepted
+            # Always inject 'progress' if accepted (not only stream/flashing)
             if "progress" in accepted_params or accepts_var_kwargs:
                 call_kwargs["progress"] = lambda p, m="": _emit_progress(task_id, p, m, progress_cb)
 
@@ -891,7 +820,6 @@ def _execute_stream_function(
         "exception": None,
         "diag_error": None,
         "stream_ended": False,
-        "iterations": 0,
     }
 
     stdout_buf = io.StringIO()
@@ -920,7 +848,6 @@ def _execute_stream_function(
                 cancel_event=cancel_event,
                 pause_event=pause_event,
                 progress_cb=progress_cb,
-                heartbeat_cb=ctx.heartbeat_callback,
                 execution_mode=execution_mode,
             )
 
@@ -944,20 +871,11 @@ def _execute_stream_function(
 
             last_output = None
             iteration = 0
-            last_heartbeat = time.monotonic()
 
             for yielded in gen:
                 # Cooperative pause/cancel
                 context.checkpoint()
                 iteration += 1
-                result["iterations"] = iteration
-                
-                # Send heartbeat periodically
-                if stream_callback and iteration % 10 == 0:
-                    try:
-                        stream_callback(task_id, {"status": "heartbeat", "iteration": iteration})
-                    except Exception:
-                        pass
                 
                 _LOG_STREAM.append(task_id, f"STREAM DEBUG - Yield #{iteration}: {yielded}")
 
@@ -989,19 +907,18 @@ def _execute_stream_function(
 
                 # Forward to stream callback (use local reference)
                 if stream_callback:
-                    if iteration == 1 or iteration % 5 == 0:
-                        _LOG_STREAM.append(task_id, f"STREAM DEBUG - Calling stream callback for iteration {iteration}")
+                    _LOG_STREAM.append(task_id, f"STREAM DEBUG - Calling stream callback for iteration {iteration}")
                     try:
                         stream_callback(task_id, {
                             "status": status,
                             "data": data,
                             "iteration": iteration,
                         })
+                        _LOG_STREAM.append(task_id, f"STREAM DEBUG - Stream callback completed")
                     except Exception as cb_err:
                         _LOG_STREAM.append(task_id, f"Stream callback error: {cb_err}", "WARN")
                 else:
-                    if iteration == 1:
-                        _LOG_STREAM.append(task_id, f"STREAM DEBUG - No stream callback available", "WARN")
+                    _LOG_STREAM.append(task_id, f"STREAM DEBUG - No stream callback available", "WARN")
 
                 last_output = data
 
@@ -1069,36 +986,17 @@ def _run_with_retries(
     is_generator = _is_generator_function(fn)
     is_stream = mode.is_streaming or is_generator
 
-    # Validate stream functions
-    if mode.is_streaming and not is_generator:
-        return TaskResult(
-            test_id=ctx.test_id,
-            task_id=task_id,
-            passed=False,
-            exception="STREAM_FUNCTION_NOT_GENERATOR",
-            duration_ms=0,
-            attempts=1,
-            status=TaskStatus.ERROR,
-            result_code="INVALID_STREAM_FUNCTION",
-        )
-
     # Preserve stream callback throughout retries
     original_stream_callback = ctx.stream_callback
     if original_stream_callback:
         _LOG_STREAM.append(task_id, f"STREAM DEBUG - Original callback preserved for retries")
 
-    # For streams, we don't want retries - they should run continuously
-    if is_stream:
-        max_attempts = 1
-    else:
-        max_attempts = ctx.max_retries + 1
-
-    while attempts < max_attempts:
+    while attempts <= ctx.max_retries:
         attempts += 1
 
         _LOG_STREAM.append(
             task_id,
-            f"Attempt {attempts}/{max_attempts} test={ctx.test_id} "
+            f"Attempt {attempts}/{ctx.max_retries + 1} test={ctx.test_id} "
             f"mode={mode.value} generator={is_generator}",
         )
 
@@ -1141,8 +1039,8 @@ def _run_with_retries(
                 status=TaskStatus.CANCELLED,
             )
 
-        # Check timeout (only for non-streams)
-        if exec_thread.is_alive() and not is_stream:
+        # Check timeout
+        if exec_thread.is_alive():
             cancel_event.set()
             _LOG_STREAM.append(task_id, f"TIMEOUT after {ctx.timeout_sec}s", "WARN")
 
@@ -1155,7 +1053,7 @@ def _run_with_retries(
                     "WARN",
                 )
 
-            if ctx.retry_on_timeout and attempts < max_attempts:
+            if ctx.retry_on_timeout and attempts <= ctx.max_retries:
                 cancel_event.clear()
                 time.sleep(ctx.retry_delay_sec + random.uniform(0, 0.25))
                 continue
@@ -1168,20 +1066,6 @@ def _run_with_retries(
                 duration_ms=duration_ms,
                 attempts=attempts,
                 status=TaskStatus.TIMEOUT,
-            )
-        elif exec_thread.is_alive() and is_stream:
-            # Stream is still running - this is normal
-            _LOG_STREAM.append(task_id, f"Stream continuing in background", "INFO")
-            # We'll consider this a success for the initial attempt
-            return TaskResult(
-                test_id=ctx.test_id,
-                task_id=task_id,
-                passed=True,
-                output=exec_result.get("output"),
-                duration_ms=duration_ms,
-                attempts=attempts,
-                status=TaskStatus.STREAMING,
-                stream_iterations=exec_result.get("iterations", 0),
             )
 
         # Check diagnostic error
@@ -1199,7 +1083,7 @@ def _run_with_retries(
                 "WARN",
             )
 
-            if is_retryable_nrc(nrc) and attempts < max_attempts:
+            if is_retryable_nrc(nrc) and attempts <= ctx.max_retries:
                 time.sleep(ctx.retry_delay_sec + random.uniform(0, 0.25))
                 continue
 
@@ -1220,7 +1104,7 @@ def _run_with_retries(
             exception = exec_result["exception"]
             _LOG_STREAM.append(task_id, f"Exception: {exception[:200]}", "ERROR")
 
-            if ctx.retry_on_exception and attempts < max_attempts:
+            if ctx.retry_on_exception and attempts <= ctx.max_retries:
                 time.sleep(ctx.retry_delay_sec + random.uniform(0, 0.25))
                 continue
 
@@ -1268,7 +1152,7 @@ def _run_with_retries(
         if is_stream and exec_result.get("stream_ended"):
             _LOG_STREAM.append(
                 task_id,
-                f"Stream completed in {duration_ms}ms after {attempts} attempt(s) with {exec_result.get('iterations', 0)} iterations",
+                f"Stream completed in {duration_ms}ms after {attempts} attempt(s)",
             )
             return TaskResult(
                 test_id=ctx.test_id,
@@ -1278,24 +1162,6 @@ def _run_with_retries(
                 duration_ms=duration_ms,
                 attempts=attempts,
                 status=TaskStatus.COMPLETED,
-                stream_iterations=exec_result.get("iterations", 0),
-            )
-
-        # For streams that are still running
-        if is_stream:
-            _LOG_STREAM.append(
-                task_id,
-                f"Stream running with {exec_result.get('iterations', 0)} iterations",
-            )
-            return TaskResult(
-                test_id=ctx.test_id,
-                task_id=task_id,
-                passed=True,
-                output=output,
-                duration_ms=duration_ms,
-                attempts=attempts,
-                status=TaskStatus.STREAMING,
-                stream_iterations=exec_result.get("iterations", 0),
             )
 
         # Success for single-shot
@@ -1361,7 +1227,6 @@ class Task:
 
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
-        self._last_heartbeat = time.time()
 
     def start(self):
         """Start task execution in background thread."""
@@ -1397,8 +1262,7 @@ class Task:
             _LOG_STREAM.append(
                 self.id,
                 f"Task completed: passed={self.result.passed}, "
-                f"duration={self.result.duration_ms}ms, status={self.status.value}, "
-                f"iterations={self.result.stream_iterations}",
+                f"duration={self.result.duration_ms}ms, status={self.status.value}",
             )
 
             if self.ctx.persist_result:
@@ -1443,11 +1307,6 @@ class Task:
                 self.status = TaskStatus.RUNNING
         _LOG_STREAM.append(self.id, "Task resumed")
 
-    def heartbeat(self) -> bool:
-        """Update heartbeat timestamp. Returns True if task is still alive."""
-        self._last_heartbeat = time.time()
-        return not self.is_terminal()
-
     def is_terminal(self) -> bool:
         """Check if task is in a terminal state."""
         return self.status in (
@@ -1456,12 +1315,6 @@ class Task:
             TaskStatus.TIMEOUT,
             TaskStatus.ERROR,
         )
-
-    def is_stale(self, max_idle_sec: float = STREAM_MAX_IDLE_SEC) -> bool:
-        """Check if task is stale (no heartbeat for too long)."""
-        if self.status == TaskStatus.STREAMING:
-            return (time.time() - self._last_heartbeat) > max_idle_sec
-        return False
 
     def get_status_dict(self) -> Dict[str, Any]:
         """Get task status as dictionary."""
@@ -1473,7 +1326,6 @@ class Task:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "last_heartbeat": datetime.fromtimestamp(self._last_heartbeat).isoformat() if self._last_heartbeat else None,
         }
 
 
@@ -1500,10 +1352,9 @@ class TaskRegistry:
             def cleanup():
                 try:
                     removed = self.cleanup_completed()
-                    stale = self.cleanup_stale_streams()
                     logs_removed = _LOG_STREAM.cleanup_old()
-                    if removed > 0 or stale > 0 or logs_removed > 0:
-                        _log_debug(f"Cleanup: removed {removed} tasks, {stale} stale streams, {logs_removed} log buffers")
+                    if removed > 0 or logs_removed > 0:
+                        _log_debug(f"Cleanup: removed {removed} tasks, {logs_removed} log buffers")
                 finally:
                     with self._lock:
                         self._cleanup_timer = None
@@ -1566,17 +1417,6 @@ class TaskRegistry:
                 removed += 1
         return removed
 
-    def cleanup_stale_streams(self, max_idle_sec: float = STREAM_MAX_IDLE_SEC) -> int:
-        """Cancel and remove stale streaming tasks."""
-        removed = 0
-        with self._lock:
-            for task in list(self._tasks.values()):
-                if task.status == TaskStatus.STREAMING and task.is_stale(max_idle_sec):
-                    _log_warn(f"Stale stream task {task.id} detected, cancelling")
-                    task.cancel()
-                    removed += 1
-        return removed
-
     def cancel_all(self):
         """Cancel all active tasks."""
         with self._lock:
@@ -1598,16 +1438,12 @@ class TaskRegistry:
         """Get registry statistics."""
         with self._lock:
             by_status: Dict[str, int] = {}
-            stale_count = 0
             for task in self._tasks.values():
                 status = task.status.value
                 by_status[status] = by_status.get(status, 0) + 1
-                if task.is_stale():
-                    stale_count += 1
             return {
                 "total": len(self._tasks),
                 "active": sum(1 for t in self._tasks.values() if not t.is_terminal()),
-                "stale_streams": stale_count,
                 "by_status": by_status,
             }
 
@@ -1815,7 +1651,7 @@ class BatchExecutor:
                     }
 
                 status = get_task_status(task_id)
-                if status.get("status") not in ("PENDING", "RUNNING", "PAUSED", "STREAMING"):
+                if status.get("status") not in ("PENDING", "RUNNING", "PAUSED"):
                     return status.get("result", {})
 
                 time.sleep(0.5)
@@ -1925,7 +1761,7 @@ def cancel_batch(batch_id: str) -> bool:
 
 
 # =============================================================================
-# AUTO-RUN HELPER: ECU STATUS EXTRACTION (FIX-52 ENHANCED, FIX-65)
+# AUTO-RUN HELPER: ECU STATUS EXTRACTION (FIX-52 ENHANCED)
 # =============================================================================
 
 def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
@@ -1936,41 +1772,16 @@ def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
     - {"ecu_statuses": [...]}
     - {"ecus": [...]}
     - {"ECU_STATUS": [...]}
-    - {"details": {"BMS": true/false, "ECM": true/false}}
+    - {"details": {"BMS": true/false}}
     - List of ECU objects directly
     - {"is_active": true, "ecu_code": "BMS"} (single ECU)
-    - {"result_data": {"ecu_statuses": [...]}} (nested)
     """
     if not output:
         return []
 
-    # Handle nested result_data
-    if isinstance(output, dict) and "result_data" in output:
-        return _extract_ecu_statuses(output["result_data"])
-
     if isinstance(output, list):
         # Direct list of ECU objects
-        result = []
-        for item in output:
-            if isinstance(item, dict):
-                if "ecu_code" in item or "ecu" in item:
-                    result.append({
-                        "ecu_code": item.get("ecu_code") or item.get("ecu", ""),
-                        "is_active": bool(item.get("is_active", False)),
-                        "error_count": item.get("error_count", 0 if item.get("is_active") else 1),
-                        "last_response": item.get("last_response"),
-                    })
-                elif "details" in item and isinstance(item["details"], dict):
-                    # Handle {"details": {...}} format
-                    for ecu_code, status in item["details"].items():
-                        if isinstance(status, bool):
-                            result.append({
-                                "ecu_code": ecu_code,
-                                "is_active": status,
-                                "error_count": 0 if status else 1,
-                                "last_response": None,
-                            })
-        return result
+        return [s for s in output if isinstance(s, dict) and ("ecu_code" in s or "ecu" in s)]
 
     if isinstance(output, dict):
         # Case-insensitive key lookup
@@ -1981,25 +1792,10 @@ def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
             return [{
                 "ecu_code": output.get("ecu_code") or output.get("ecu", ""),
                 "is_active": bool(output.get("is_active", False)),
-                "error_count": output.get("error_count", 0 if output.get("is_active") else 1),
+                "error_count": 0 if output.get("is_active") else 1,
                 "last_response": output.get("last_response"),
             }]
 
-        # Check for details dict format {"BMS": true/false, "ECM": false}
-        if all(isinstance(k, str) and isinstance(v, bool) for k, v in output.items()):
-            result = []
-            for ecu_code, is_active in output.items():
-                if not ecu_code.startswith("_"):  # Skip internal keys
-                    result.append({
-                        "ecu_code": ecu_code,
-                        "is_active": is_active,
-                        "error_count": 0 if is_active else 1,
-                        "last_response": None,
-                    })
-            if result:
-                return result
-
-        # Look for common container keys
         ecu_list = (
             output_lower.get("ecu_statuses") or
             output_lower.get("ecu_status") or
@@ -2009,9 +1805,9 @@ def _extract_ecu_statuses(output: Any) -> List[Dict[str, Any]]:
         )
 
         if isinstance(ecu_list, list):
-            return _extract_ecu_statuses(ecu_list)
+            return [s for s in ecu_list if isinstance(s, dict)]
 
-        # Handle details dict format {"details": {"BMS": true}}
+        # Handle details dict format {"BMS": true/false}
         details = output_lower.get("details")
         if isinstance(details, dict):
             result = []
@@ -2042,7 +1838,6 @@ def _extract_result_value(output: Any) -> Optional[str]:
     - {"vin": "...", ...}
     - {"value": ..., ...}
     - {"voltage": ..., ...}
-    - {"battery_voltage": ...}
     - Single-key dicts: {"battery_voltage": 48.2}
     - Nested result wrappers
     - {"is_active": true} for ECU status
@@ -2060,7 +1855,7 @@ def _extract_result_value(output: Any) -> Optional[str]:
     output_lower = {k.lower(): v for k, v in output.items()}
 
     # Priority order for known value keys
-    for key in ("vin", "value", "voltage", "battery_voltage", "result", "data"):
+    for key in ("value", "vin", "voltage", "result", "data", "battery_voltage"):
         val = output_lower.get(key)
         if val is not None and not isinstance(val, (dict, list)):
             return str(val)
@@ -2139,7 +1934,6 @@ class AutoRunResult:
     log_as_vin: bool = False
     is_required: bool = True
     source: str = "section"  # FIX-50: Track source
-    stream_iterations: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -2163,7 +1957,6 @@ class AutoRunResult:
             "log_as_vin": self.log_as_vin,
             "is_required": self.is_required,
             "source": self.source,
-            "stream_iterations": self.stream_iterations,
         }
 
 
@@ -2295,7 +2088,6 @@ def start_auto_run_session(
     FIX-52: ECU status tracking for colored dots
     FIX-53: Display pages support for VIN and Battery Voltage
     FIX-54: Manual VIN input integration
-    FIX-64: Stream heartbeat for stale detection
 
     Args:
         session_id: Session to start
@@ -2395,7 +2187,6 @@ def start_auto_run_session(
                         log_as_vin=prog.log_as_vin,
                         is_required=prog.is_required,
                         source=prog.source,
-                        stream_iterations=task_result.get("stream_iterations", 0),
                     )
                     session.update_result(prog.program_id, final_res)
 
@@ -2439,33 +2230,6 @@ def start_auto_run_session(
             for prog in stream_programs:
                 _log_info(f"  Auto-run stream: {prog.program_name} (source={prog.source})")
 
-                # Validate that stream function is a generator
-                if not _is_generator_function(prog.fn):
-                    _log_error(f"    ERROR: {prog.program_name} is type 'stream' but function is not a generator!")
-                    error_result = AutoRunResult(
-                        program_id=prog.program_id,
-                        program_name=prog.program_name,
-                        program_type=prog.program_type,
-                        status="failed",
-                        passed=False,
-                        error_message="Stream function is not a generator",
-                        display_type=prog.display_type,
-                        display_label=prog.display_label,
-                        display_pages=prog.display_pages,
-                        fallback_action=prog.fallback_action,
-                        fallback_input=prog.fallback_input,
-                        log_as_vin=prog.log_as_vin,
-                        is_required=prog.is_required,
-                        source=prog.source,
-                    )
-                    session.update_result(prog.program_id, error_result)
-                    if on_single_result:
-                        try:
-                            on_single_result(session_id, prog.program_id, error_result.to_dict())
-                        except Exception:
-                            pass
-                    continue
-
                 # FIX-51: Preserve existing callback and chain with new one
                 existing_cb = prog.ctx.stream_callback
 
@@ -2497,14 +2261,6 @@ def start_auto_run_session(
                 prog.ctx.stream_callback = make_stream_cb(
                     prog.program_id, existing_cb
                 )
-
-                # Add heartbeat callback for stream health monitoring
-                def make_heartbeat_cb(p_id: str):
-                    def heartbeat_cb(tid: str):
-                        _log_debug(f"Stream heartbeat: {p_id} ({tid})")
-                    return heartbeat_cb
-
-                prog.ctx.heartbeat_callback = make_heartbeat_cb(prog.program_id)
 
                 try:
                     task_info = execute_test_async(
@@ -2590,7 +2346,6 @@ def get_auto_run_session(session_id: str) -> Optional[Dict[str, Any]]:
 def get_ecu_status_from_session(session_id: str, ecu_code: str) -> Optional[Dict[str, Any]]:
     """
     FIX-52: Get ECU status for colored dots in UI.
-    FIX-65: Enhanced to handle multiple ECUs.
     """
     with _AUTO_RUN_LOCK:
         session = _AUTO_RUN_SESSIONS.get(session_id)
@@ -2756,14 +2511,6 @@ def clear_task_logs(task_id: str):
     _LOG_STREAM.clear(task_id)
 
 
-def send_task_heartbeat(task_id: str) -> bool:
-    """Send heartbeat for a task (called by service)."""
-    task = _TASK_REGISTRY.get(task_id)
-    if not task:
-        return False
-    return task.heartbeat()
-
-
 # =============================================================================
 # PUBLIC API — HOUSEKEEPING
 # =============================================================================
@@ -2825,12 +2572,6 @@ class StreamingTestController:
         self.task_id: Optional[str] = None
         self.is_running = False
         self._lock = threading.Lock()
-        
-        # Validate that stream function is a generator
-        if ctx.get_mode().is_streaming and not _is_generator_function(fn):
-            raise StreamNotGeneratorError(
-                f"Function {fn.__name__} is not a generator but configured as stream"
-            )
 
     def start(self) -> str:
         """Start streaming test."""
@@ -2882,7 +2623,7 @@ class StreamingTestController:
 
 def _init_runner():
     """Initialize the runner module."""
-    _log_info(f"Runner v3.7.0 max_tasks={MAX_CONCURRENT_TASKS}")
+    _log_info(f"Runner v3.6.0 max_tasks={MAX_CONCURRENT_TASKS}")
     _log_info(f"Modes: {[m.value for m in ExecutionMode]}")
 
 
@@ -2902,7 +2643,7 @@ __all__ = [
     "create_auto_run_session",
     "start_auto_run_session",
     "get_auto_run_session",
-    "get_ecu_status_from_session",
+    "get_ecu_status_from_session",  # NEW: Get ECU status for colored dots
     "submit_manual_vin",
     "stop_auto_run_session",
     "cleanup_auto_run_sessions",
@@ -2920,7 +2661,6 @@ __all__ = [
     "get_task_log_lines",
     "get_new_task_logs",
     "clear_task_logs",
-    "send_task_heartbeat",
 
     # Batch management
     "get_batch_status",
@@ -2948,7 +2688,6 @@ __all__ = [
     "CancelledError",
     "TimeoutError",
     "ExecutionError",
-    "StreamNotGeneratorError",
 
     # Utilities
     "decode_negative_response",
@@ -2957,5 +2696,4 @@ __all__ = [
     "validate_stream_limits",
     "_extract_result_value",
     "_extract_ecu_statuses",
-    "_is_generator_function",
 ]
