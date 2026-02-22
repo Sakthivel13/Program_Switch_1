@@ -3,7 +3,6 @@
   "$id": "https://nirix.tvsmotor.com/schema/tests.schema.json",
   "title": "NIRIX Diagnostic Tests Definition",
   "description": "Individual test sequence definitions",
-  "version": "2.1.0",
   "type": "object",
 
   "required": ["vehicle", "section", "parameter", "tests"],
@@ -11,15 +10,12 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "default": "2.1.0",
-      "description": "Schema version for compatibility checking"
+      "default": "1.0"
     },
 
     "vehicle": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 100,
       "description": "Must match app.vehicles.name"
     },
 
@@ -31,16 +27,12 @@
 
     "ecu": {
       "type": ["string", "null"],
-      "pattern": "^[A-Za-z0-9_-]+$",
-      "minLength": 1,
-      "maxLength": 50,
       "description": "ECU code - maps to app.tests.ecu - Required when section=diagnostics"
     },
 
     "parameter": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 100,
       "description": "Parameter code - maps to app.tests.parameter"
     },
 
@@ -87,20 +79,17 @@
           "type": "string",
           "pattern": "^[a-zA-Z0-9_\\-]+$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Unique test ID - maps to app.tests.id"
         },
 
         "label": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 200,
           "description": "Test sequence name - maps to app.tests.label"
         },
 
         "description": {
           "type": ["string", "null"],
-          "maxLength": 1000,
           "description": "Test description"
         },
 
@@ -108,15 +97,13 @@
           "type": "string",
           "pattern": "^[a-zA-Z0-9_\\.]+$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Python module name (without .py)"
         },
 
         "function_name": {
           "type": "string",
-          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "pattern": "^[a-zA-Z0-9_]+$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Python function name"
         },
 
@@ -140,7 +127,6 @@
 
         "button_name": {
           "type": "string",
-          "maxLength": 50,
           "default": "Run",
           "description": "Button label in UI"
         },
@@ -149,7 +135,7 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["READ", "CLEAR", "WRITE", "CONTROL"]
+              "enum": ["READ", "CLEAR"]
             },
             {
               "type": "null"
@@ -161,9 +147,7 @@
 
         "version": {
           "type": "string",
-          "pattern": "^\\d+\\.\\d+$",
-          "default": "1.0",
-          "description": "Test version"
+          "default": "1.0"
         },
 
         "is_active": {
@@ -174,7 +158,6 @@
         "sort_order": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9999,
           "default": 0
         },
 
@@ -203,26 +186,6 @@
           ],
           "default": null,
           "description": "Flashing configuration - required when parameter_page_type is ECU_FLASHING"
-        },
-
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "maxLength": 50
-          },
-          "default": [],
-          "description": "Optional tags for categorizing tests"
-        },
-
-        "dependencies": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9_\\-]+$"
-          },
-          "default": [],
-          "description": "Test IDs that must run before this test"
         }
       },
 
@@ -257,25 +220,6 @@
             },
             "required": ["function_role"]
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "execution": {
-                "properties": {
-                  "mode": { "const": "stream" }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "output_limits": {
-                "type": "array",
-                "minItems": 1
-              }
-            }
-          }
         }
       ],
 
@@ -289,15 +233,12 @@
       "properties": {
         "name": {
           "type": "string",
-          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Maps to app.test_inputs.name"
         },
 
         "label": {
           "type": ["string", "null"],
-          "maxLength": 200,
           "description": "Maps to app.test_inputs.label"
         },
 
@@ -310,7 +251,6 @@
         "length": {
           "type": ["integer", "null"],
           "minimum": 1,
-          "maximum": 1000,
           "description": "Expected input length"
         },
 
@@ -330,8 +270,7 @@
               "type": "array",
               "items": {
                 "type": ["string", "number", "boolean"]
-              },
-              "minItems": 1
+              }
             },
             {
               "type": "null"
@@ -349,7 +288,6 @@
 
         "format_hint": {
           "type": ["string", "null"],
-          "maxLength": 200,
           "description": "Format hint (e.g., DDMMYYYY, 12 hex chars) - maps to app.test_inputs.format_hint"
         },
 
@@ -361,20 +299,13 @@
 
         "config_key": {
           "type": ["string", "null"],
-          "maxLength": 100,
           "description": "DB key for storing default values - maps to app.test_inputs.config_key"
         },
 
         "sort_order": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9999,
           "default": 0
-        },
-
-        "validation_pattern": {
-          "type": ["string", "null"],
-          "description": "Regex pattern for input validation"
         }
       },
 
@@ -388,9 +319,7 @@
       "properties": {
         "signal": {
           "type": "string",
-          "pattern": "^[a-zA-Z0-9_]+$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Output key name - maps to app.test_output_limits.signal"
         },
 
@@ -406,7 +335,6 @@
 
         "unit": {
           "type": ["string", "null"],
-          "maxLength": 20,
           "description": "Engineering unit (rpm, V, °C, %)"
         }
       },
@@ -434,21 +362,18 @@
         "timeout_sec": {
           "type": "number",
           "minimum": 1,
-          "maximum": 3600,
           "default": 15
         },
 
         "max_retries": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 10,
           "default": 3
         },
 
         "retry_delay_sec": {
           "type": "number",
           "minimum": 0,
-          "maximum": 10,
           "default": 1.5
         },
 
@@ -460,18 +385,6 @@
         "retry_on_exception": {
           "type": "boolean",
           "default": false
-        },
-
-        "requires_confirmation": {
-          "type": "boolean",
-          "default": false,
-          "description": "Whether the test requires user confirmation before running"
-        },
-
-        "requires_hardware": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether the test requires hardware (CAN bus)"
         }
       },
 
@@ -486,19 +399,18 @@
         "file_name": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 255,
           "description": "Maps to app.test_flashing_config.file_name"
         },
 
         "file_type": {
           "type": "string",
-          "enum": ["HEX", "BIN", "SREC", "S19", "SRE", "ELF"],
+          "enum": ["HEX", "BIN", "SREC", "S19", "SRE"],
           "description": "Firmware file type"
         },
 
         "method": {
           "type": "string",
-          "enum": ["UDS", "BOOTLOADER", "OEM", "CAN", "KWP", "ISO15765"],
+          "enum": ["UDS", "BOOTLOADER", "OEM", "CAN", "KWP"],
           "description": "Flashing method"
         },
 
@@ -507,8 +419,7 @@
             {
               "type": "array",
               "items": {
-                "type": "string",
-                "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                "type": "string"
               }
             },
             {
@@ -517,25 +428,6 @@
           ],
           "default": null,
           "description": "Array of required input names - maps to app.test_flashing_config.required_inputs"
-        },
-
-        "verify_after_flash": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether to verify the flash after programming"
-        },
-
-        "allow_downgrade": {
-          "type": "boolean",
-          "default": false,
-          "description": "Whether to allow flashing older firmware versions"
-        },
-
-        "min_battery_voltage": {
-          "type": ["number", "null"],
-          "minimum": 0,
-          "maximum": 100,
-          "description": "Minimum battery voltage required for flashing"
         }
       },
 
