@@ -1,991 +1,162 @@
 {% extends "base.html" %}
 {% block title %}Login – TVS NIRIX{% endblock %}
 
-{% block head %}
-<style>
-  /* ===================== LOGIN PAGE SPECIFIC STYLES ===================== */
-  :root {
-    --login-card-width: 400px;
-    --login-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .login-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, var(--bg-main) 0%, var(--card-bg) 100%);
-  }
-
-  .login-card {
-    width: 100%;
-    max-width: var(--login-card-width);
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 24px;
-    padding: 2.5rem 2rem;
-    box-shadow: var(--shadow);
-    animation: slideUp 0.5s ease-out;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .login-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--tvs-blue), var(--tvs-blue-light));
-  }
-
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .login-header {
-    text-align: center;
-    margin-bottom: 2rem;
-  }
-
-  .login-logo {
-    height: 80px;
-    width: auto;
-    margin-bottom: 1.5rem;
-    transition: var(--login-transition);
-  }
-
-  .login-logo:hover {
-    transform: scale(1.05);
-  }
-
-  .login-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--text-main);
-    margin-bottom: 0.5rem;
-  }
-
-  .login-subtitle {
-    color: var(--muted-text);
-    font-size: 0.9rem;
-  }
-
-  .login-subtitle i {
-    margin-right: 0.25rem;
-  }
-
-  .login-form {
-    margin-bottom: 1.5rem;
-  }
-
-  .form-floating-group {
-    position: relative;
-    margin-bottom: 1.5rem;
-  }
-
-  .form-floating-group .form-control {
-    height: 56px;
-    padding: 1rem 1rem 0.5rem;
-    font-size: 1rem;
-    background: var(--bg-main);
-    border: 2px solid var(--border-color);
-    border-radius: 14px;
-    color: var(--text-main);
-    transition: var(--login-transition);
-  }
-
-  .form-floating-group .form-control:focus {
-    border-color: var(--tvs-blue-light);
-    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
-    outline: none;
-    background: var(--card-bg);
-  }
-
-  .form-floating-group .form-control.is-valid {
-    border-color: #10b981;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2310b981' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right calc(0.75em + 0.1875rem) center;
-    background-size: calc(1.25em + 0.375rem) calc(1.25em + 0.375rem);
-  }
-
-  .form-floating-group .form-control.is-invalid {
-    border-color: #ef4444;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23ef4444'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23ef4444' stroke='none'/%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right calc(0.75em + 0.1875rem) center;
-    background-size: calc(1.25em + 0.375rem) calc(1.25em + 0.375rem);
-  }
-
-  .form-floating-group label {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 1rem 1rem 0.5rem;
-    pointer-events: none;
-    border: 1px solid transparent;
-    transform-origin: 0 0;
-    transition: opacity 0.1s ease-in-out, transform 0.1s ease-in-out;
-    color: var(--muted-text);
-  }
-
-  .form-floating-group .form-control:focus ~ label,
-  .form-floating-group .form-control:not(:placeholder-shown) ~ label {
-    opacity: 0.65;
-    transform: scale(0.85) translateY(-0.5rem) translateX(0.15rem);
-  }
-
-  .input-icon {
-    position: absolute;
-    right: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted-text);
-    cursor: pointer;
-    transition: var(--login-transition);
-    z-index: 10;
-  }
-
-  .input-icon:hover {
-    color: var(--tvs-blue);
-  }
-
-  .password-strength {
-    margin-top: 0.5rem;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--border-color);
-    overflow: hidden;
-  }
-
-  .password-strength-bar {
-    height: 100%;
-    width: 0%;
-    transition: width 0.3s ease, background-color 0.3s ease;
-  }
-
-  .password-strength-bar.weak {
-    width: 33.33%;
-    background-color: #ef4444;
-  }
-
-  .password-strength-bar.medium {
-    width: 66.66%;
-    background-color: #f59e0b;
-  }
-
-  .password-strength-bar.strong {
-    width: 100%;
-    background-color: #10b981;
-  }
-
-  .vci-select {
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 0.75rem center;
-    background-size: 16px 12px;
-  }
-
-  .vci-option {
-    padding: 0.5rem;
-  }
-
-  .vci-option i {
-    margin-right: 0.5rem;
-    color: var(--tvs-blue);
-  }
-
-  .login-btn {
-    width: 100%;
-    height: 56px;
-    border-radius: 14px;
-    font-weight: 600;
-    font-size: 1rem;
-    letter-spacing: 0.5px;
-    background: var(--tvs-blue);
-    color: white;
-    border: none;
-    transition: var(--login-transition);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .login-btn:hover:not(:disabled) {
-    background: var(--tvs-blue-hover);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(20, 59, 104, 0.3);
-  }
-
-  .login-btn:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  .login-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .login-btn .spinner {
-    display: inline-block;
-    width: 1rem;
-    height: 1rem;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 0.6s linear infinite;
-    margin-right: 0.5rem;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .login-links {
-    text-align: center;
-    margin-top: 1.5rem;
-  }
-
-  .login-links a {
-    color: var(--muted-text);
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: var(--login-transition);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem;
-  }
-
-  .login-links a:hover {
-    color: var(--tvs-blue);
-  }
-
-  .login-links .divider {
-    margin: 0 0.5rem;
-    color: var(--border-color);
-  }
-
-  .alert {
-    border-radius: 14px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-    border: none;
-    animation: slideDown 0.3s ease-out;
-  }
-
-  @keyframes slideDown {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .alert-danger {
-    background-color: #fef2f2;
-    color: #991b1b;
-    border-left: 4px solid #ef4444;
-  }
-
-  .alert-success {
-    background-color: #f0fdf4;
-    color: #14532d;
-    border-left: 4px solid #10b981;
-  }
-
-  .alert i {
-    margin-right: 0.5rem;
-  }
-
-  .remember-forgot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-  }
-
-  .remember-me {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--text-main);
-    font-size: 0.9rem;
-  }
-
-  .remember-me input[type="checkbox"] {
-    width: 1rem;
-    height: 1rem;
-    accent-color: var(--tvs-blue);
-  }
-
-  .forgot-link {
-    color: var(--muted-text);
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: var(--login-transition);
-  }
-
-  .forgot-link:hover {
-    color: var(--tvs-blue);
-  }
-
-  .station-id {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    padding: 0.5rem 1rem;
-    font-size: 0.8rem;
-    color: var(--muted-text);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    z-index: 100;
-  }
-
-  .station-id i {
-    color: var(--tvs-blue);
-  }
-
-  /* Dark mode adjustments */
-  body.dark .login-card {
-    background: var(--card-bg);
-  }
-
-  body.dark .form-floating-group .form-control {
-    background: var(--bg-main);
-    color: var(--text-main);
-  }
-
-  body.dark .vci-select {
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23e2e8f0' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
-  }
-
-  /* Mobile responsiveness */
-  @media (max-width: 480px) {
-    .login-card {
-      padding: 2rem 1.5rem;
-    }
-
-    .login-title {
-      font-size: 1.5rem;
-    }
-
-    .station-id {
-      bottom: 0.5rem;
-      right: 0.5rem;
-      font-size: 0.7rem;
-      padding: 0.25rem 0.75rem;
-    }
-  }
-
-  /* Loading skeleton */
-  .skeleton {
-    background: linear-gradient(90deg, 
-      var(--border-color) 25%, 
-      var(--card-bg) 50%, 
-      var(--border-color) 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-    border-radius: 8px;
-    height: 56px;
-  }
-
-  @keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  /* PIN input specific */
-  .pin-input {
-    font-family: 'Courier New', monospace;
-    font-size: 1.2rem;
-    letter-spacing: 4px;
-    text-align: center;
-  }
-
-  /* Tooltip */
-  .tooltip-icon {
-    cursor: help;
-    border-bottom: 1px dotted var(--muted-text);
-  }
-
-  /* Version badge */
-  .version-badge {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    background: rgba(20, 59, 104, 0.1);
-    color: var(--tvs-blue);
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 600;
-  }
-
-  body.dark .version-badge {
-    background: rgba(255, 255, 255, 0.1);
-    color: #60a5fa;
-  }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="login-container">
-  <!-- Station ID Badge -->
-  <div class="station-id">
-    <i class="fas fa-microchip"></i>
-    <span>Station: {{ pc_name }}</span>
-  </div>
 
-  <div class="login-card">
-    <!-- Version Badge -->
-    <div class="version-badge">
-      <i class="fas fa-tag me-1"></i>v3.2.0
-    </div>
+<div class="row justify-content-center" style="margin-top:60px;">
+  <div class="col-12 col-sm-10 col-md-6 col-lg-4">
 
-    <!-- =====================================================
-         LOGO + TITLE
-    ====================================================== -->
-    <div class="login-header">
-      <img src="{{ url_for('vehicle_image', filename='Nirix_Logo.png') }}"
-           alt="NIRIX Logo"
-           class="login-logo"
-           loading="lazy">
-      <h1 class="login-title">Welcome Back</h1>
-      <div class="login-subtitle">
-        <i class="fas fa-car"></i>
-        TVS NIRIX Diagnostic System
-      </div>
-    </div>
+    <div class="card shadow-sm p-4" style="border-radius:14px;">
 
-    <!-- =====================================================
-         ALERTS
-    ====================================================== -->
-    {% if error %}
-      <div class="alert alert-danger">
-        <i class="fas fa-exclamation-circle"></i>
-        {{ error }}
-      </div>
-    {% endif %}
-
-    {% if message %}
-      <div class="alert alert-success">
-        <i class="fas fa-check-circle"></i>
-        {{ message }}
-      </div>
-    {% endif %}
-
-    <!-- =====================================================
-         LOGIN FORM
-    ====================================================== -->
-    <form method="post"
-          action="{{ url_for('login') }}"
-          class="login-form"
-          id="loginForm"
-          novalidate>
-
-      <!-- EMAIL FIELD -->
-      <div class="form-floating-group">
-        <input type="email"
-               name="email"
-               id="emailField"
-               class="form-control"
-               placeholder="name@example.com"
-               value="{{ request.form.email if request.form.email else '' }}"
-               autocomplete="username"
-               required
-               pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-               title="Please enter a valid email address">
-        <label for="emailField">
-          <i class="fas fa-envelope me-1"></i>Email ID
-        </label>
-        <div class="invalid-feedback" id="emailError"></div>
-      </div>
-
-      <!-- PIN FIELD WITH TOGGLE -->
-      <div class="form-floating-group">
-        <input type="password"
-               name="pin"
-               id="pinField"
-               class="form-control pin-input"
-               maxlength="4"
-               pattern="[0-9]{4}"
-               inputmode="numeric"
-               autocomplete="current-password"
-               placeholder="••••"
-               required
-               title="Enter your 4-digit PIN">
-        <label for="pinField">
-          <i class="fas fa-lock me-1"></i>PIN (4 digits)
-        </label>
-        
-        <!-- PIN visibility toggle -->
-        <span id="togglePin"
-              title="Show/Hide PIN"
-              class="input-icon"
-              role="button"
-              tabindex="0"
-              aria-label="Toggle PIN visibility">
-          <i class="far fa-eye" id="pinIcon"></i>
-        </span>
-
-        <!-- Password strength indicator (for registration, not login) -->
-        <div class="password-strength d-none">
-          <div class="password-strength-bar" id="passwordStrength"></div>
+      <!-- =====================================================
+           LOGO + TITLE
+      ====================================================== -->
+      <div class="text-center mb-3">
+        <img src="{{ url_for('vehicle_image', filename='Nirix_Logo.png') }}"
+             alt="NIRIX"
+             style="height:80px; object-fit:contain;">
+        <h5 class="mt-3 mb-0 fw-bold">Login</h5>
+        <div class="small text-muted">
+          TVS NIRIX Diagnostic System
         </div>
-        <div class="invalid-feedback" id="pinError"></div>
       </div>
 
-      <!-- REMEMBER ME & FORGOT PIN -->
-      <div class="remember-forgot">
-        <label class="remember-me">
-          <input type="checkbox" name="remember" id="rememberMe">
-          <span>Remember me</span>
-        </label>
-        <a href="{{ url_for('forgot_pin') }}" class="forgot-link">
-          <i class="fas fa-key me-1"></i>Forgot PIN?
+      <!-- =====================================================
+           ALERTS
+      ====================================================== -->
+      {% if error %}
+        <div class="alert alert-danger py-2 small">
+          {{ error }}
+        </div>
+      {% endif %}
+
+      {% if message %}
+        <div class="alert alert-success py-2 small">
+          {{ message }}
+        </div>
+      {% endif %}
+
+      <!-- =====================================================
+           LOGIN FORM
+      ====================================================== -->
+      <form method="post"
+            action="{{ url_for('login') }}"
+            novalidate>
+
+        <!-- EMAIL -->
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">
+            Email ID
+          </label>
+          <input type="email"
+                 name="email"
+                 class="form-control"
+                 placeholder="your.name@company.com"
+                 autocomplete="username"
+                 required>
+        </div>
+
+        <!-- PIN -->
+        <div class="mb-3 position-relative">
+          <label class="form-label small fw-semibold">
+            PIN (4 digits)
+          </label>
+
+          <input type="password"
+                 name="pin"
+                 id="pinField"
+                 maxlength="4"
+                 pattern="[0-9]{4}"
+                 inputmode="numeric"
+                 autocomplete="current-password"
+                 class="form-control"
+                 placeholder="••••"
+                 required>
+
+          <span id="togglePin"
+                title="Show / Hide PIN"
+                class="position-absolute"
+                style="
+                  right:12px;
+                  top:38px;
+                  cursor:pointer;
+                  opacity:0.6;
+                  user-select:none;
+                ">
+            👁
+          </span>
+        </div>
+
+        <!-- VCI MODE -->
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">
+            VCI Interface
+          </label>
+
+          <select name="vci_mode"
+                  class="form-select"
+                  required>
+            <option value="pcan"
+              {% if default_vci == 'pcan' %}selected{% endif %}>
+              PCAN (Peak – Windows)
+            </option>
+
+            <option value="socketcan"
+              {% if default_vci == 'socketcan' %}selected{% endif %}>
+              SocketCAN (MCP2515 – Linux / RPi)
+            </option>
+          </select>
+
+          <div class="form-text small">
+            This sets the active CAN interface for the session.
+          </div>
+        </div>
+
+        <!-- SUBMIT -->
+        <button type="submit"
+                class="btn btn-tvs w-100 mt-2">
+          LOGIN
+        </button>
+
+      </form>
+
+      <!-- =====================================================
+           LINKS
+      ====================================================== -->
+      <div class="mt-3 text-center small">
+        <a href="{{ url_for('forgot_pin') }}">
+          Forgot PIN?
         </a>
       </div>
 
-      <!-- VCI MODE SELECTION -->
-      <div class="form-floating-group">
-        <select name="vci_mode"
-                id="vciMode"
-                class="form-control vci-select"
-                required>
-          <option value="pcan" class="vci-option"
-            {% if default_vci == 'pcan' %}selected{% endif %}>
-            <i class="fas fa-plug"></i> PCAN (Peak – Windows)
-          </option>
-          <option value="socketcan" class="vci-option"
-            {% if default_vci == 'socketcan' %}selected{% endif %}>
-            <i class="fas fa-microchip"></i> SocketCAN (MCP2515 – Linux / RPi)
-          </option>
-          <option value="virtual" class="vci-option">
-            <i class="fas fa-flask"></i> Virtual (Testing Only)
-          </option>
-        </select>
-        <label for="vciMode">
-          <i class="fas fa-network-wired me-1"></i>VCI Interface
-        </label>
-        
-        <!-- Help tooltip -->
-        <span class="input-icon tooltip-icon"
-              title="Vehicle Communication Interface - Select based on your hardware"
-              data-bs-toggle="tooltip"
-              data-bs-placement="right">
-          <i class="far fa-question-circle"></i>
-        </span>
+      <div class="mt-2 text-center small">
+        New user?
+        <a href="{{ url_for('register') }}">
+          Register here
+        </a>
       </div>
 
-      <!-- Additional VCI info -->
-      <div class="small text-muted mb-3" id="vciInfo">
-        <i class="fas fa-info-circle me-1"></i>
-        <span id="vciInfoText">
-          {% if default_vci == 'pcan' %}
-            Using PCAN interface for Windows systems
-          {% else %}
-            Using SocketCAN interface for Linux systems
-          {% endif %}
-        </span>
-      </div>
-
-      <!-- SUBMIT BUTTON -->
-      <button type="submit"
-              class="login-btn"
-              id="loginBtn"
-              aria-label="Login to NIRIX Diagnostics">
-        <span class="btn-text">LOGIN</span>
-        <span class="btn-spinner d-none">
-          <span class="spinner"></span> Logging in...
-        </span>
-      </button>
-
-    </form>
-
-    <!-- =====================================================
-         ADDITIONAL LINKS
-    ====================================================== -->
-    <div class="login-links">
-      <a href="{{ url_for('register') }}">
-        <i class="fas fa-user-plus"></i>
-        New User? Register
-      </a>
-      <span class="divider">|</span>
-      <a href="#" onclick="showHardwareHelp()">
-        <i class="fas fa-question-circle"></i>
-        Hardware Help
-      </a>
     </div>
 
-    <!-- System Status -->
-    <div class="text-center mt-3 small text-muted">
-      <i class="fas fa-circle text-success me-1" style="font-size: 0.5rem;"></i>
-      System Status: Online
-    </div>
   </div>
 </div>
 
-<!-- Hardware Help Modal -->
-<div class="modal fade" id="hardwareHelpModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">
-          <i class="fas fa-microchip me-2"></i>
-          Hardware Selection Guide
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <h6><i class="fas fa-plug text-primary me-2"></i>PCAN (Peak Systems)</h6>
-          <p class="small text-muted">Recommended for Windows systems. Requires Peak PCAN USB interface and drivers.</p>
-        </div>
-        <div class="mb-3">
-          <h6><i class="fas fa-microchip text-success me-2"></i>SocketCAN (MCP2515)</h6>
-          <p class="small text-muted">For Linux systems (including Raspberry Pi). Uses MCP2515 based CAN modules.</p>
-        </div>
-        <div class="mb-3">
-          <h6><i class="fas fa-flask text-warning me-2"></i>Virtual</h6>
-          <p class="small text-muted">For testing without hardware. Creates virtual CAN interface (vcan0).</p>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// ===========================================================================
-// LOGIN PAGE JAVASCRIPT (FIX-70 ENHANCED)
-// ===========================================================================
-
-(function() {
-  // DOM Elements
+/* =====================================================
+   PIN VISIBILITY TOGGLE
+===================================================== */
+(function () {
   const toggle = document.getElementById("togglePin");
-  const field = document.getElementById("pinField");
-  const pinIcon = document.getElementById("pinIcon");
-  const emailField = document.getElementById("emailField");
-  const loginForm = document.getElementById("loginForm");
-  const loginBtn = document.getElementById("loginBtn");
-  const vciSelect = document.getElementById("vciMode");
-  const vciInfoText = document.getElementById("vciInfoText");
-  const rememberMe = document.getElementById("rememberMe");
+  const field  = document.getElementById("pinField");
 
-  // =========================================================================
-  // INITIALIZATION
-  // =========================================================================
-  function init() {
-    // Load saved email if "Remember me" was checked
-    loadSavedCredentials();
-    
-    // Add event listeners
-    if (toggle) toggle.addEventListener("click", togglePinVisibility);
-    if (toggle) toggle.addEventListener("keydown", handleToggleKey);
-    if (field) field.addEventListener("input", validatePIN);
-    if (field) field.addEventListener("blur", validatePIN);
-    if (emailField) emailField.addEventListener("blur", validateEmail);
-    if (vciSelect) vciSelect.addEventListener("change", updateVCIInfo);
-    if (loginForm) loginForm.addEventListener("submit", handleSubmit);
+  if (!toggle || !field) return;
 
-    // Initialize tooltips
-    initializeTooltips();
-
-    // Auto-focus email field
-    if (emailField) emailField.focus();
-
-    // Check for saved theme preference
-    checkThemePreference();
-  }
-
-  // =========================================================================
-  // PIN VISIBILITY TOGGLE (FIX-83)
-  // =========================================================================
-  function togglePinVisibility() {
-    if (!field || !pinIcon) return;
-    
-    const isPassword = field.type === "password";
-    field.type = isPassword ? "text" : "password";
-    
-    // Toggle icon
-    pinIcon.className = isPassword ? "far fa-eye-slash" : "far fa-eye";
-    
-    // Announce for screen readers
-    const announcement = document.createElement('div');
-    announcement.setAttribute('aria-live', 'polite');
-    announcement.classList.add('visually-hidden');
-    announcement.textContent = isPassword ? 'PIN visible' : 'PIN hidden';
-    document.body.appendChild(announcement);
-    setTimeout(() => announcement.remove(), 1000);
-  }
-
-  function handleToggleKey(e) {
-    // Enter or Space key toggles visibility
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      togglePinVisibility();
-    }
-  }
-
-  // =========================================================================
-  // VALIDATION (FIX-84)
-  // =========================================================================
-  function validatePIN() {
-    if (!field) return true;
-    
-    const pin = field.value.trim();
-    const errorEl = document.getElementById("pinError");
-    const isValid = /^\d{4}$/.test(pin);
-    
-    if (pin.length > 0) {
-      if (!isValid) {
-        field.classList.add("is-invalid");
-        field.classList.remove("is-valid");
-        if (errorEl) errorEl.textContent = "PIN must be exactly 4 digits";
-      } else {
-        field.classList.add("is-valid");
-        field.classList.remove("is-invalid");
-        if (errorEl) errorEl.textContent = "";
-      }
-    } else {
-      field.classList.remove("is-valid", "is-invalid");
-    }
-    
-    return isValid || pin.length === 0;
-  }
-
-  function validateEmail() {
-    if (!emailField) return true;
-    
-    const email = emailField.value.trim();
-    const errorEl = document.getElementById("emailError");
-    const pattern = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
-    const isValid = pattern.test(email);
-    
-    if (email.length > 0) {
-      if (!isValid) {
-        emailField.classList.add("is-invalid");
-        emailField.classList.remove("is-valid");
-        if (errorEl) errorEl.textContent = "Please enter a valid email address";
-      } else {
-        emailField.classList.add("is-valid");
-        emailField.classList.remove("is-invalid");
-        if (errorEl) errorEl.textContent = "";
-      }
-    } else {
-      emailField.classList.remove("is-valid", "is-invalid");
-    }
-    
-    return isValid || email.length === 0;
-  }
-
-  // =========================================================================
-  // VCI INFO UPDATE
-  // =========================================================================
-  function updateVCIInfo() {
-    if (!vciSelect || !vciInfoText) return;
-    
-    const value = vciSelect.value;
-    let info = "";
-    
-    switch(value) {
-      case 'pcan':
-        info = "Using PCAN interface for Windows systems";
-        break;
-      case 'socketcan':
-        info = "Using SocketCAN interface for Linux systems";
-        break;
-      case 'virtual':
-        info = "Using Virtual CAN interface for testing";
-        break;
-      default:
-        info = "Select a VCI interface";
-    }
-    
-    vciInfoText.textContent = info;
-  }
-
-  // =========================================================================
-  // REMEMBER ME FUNCTIONALITY (FIX-85)
-  // =========================================================================
-  function loadSavedCredentials() {
-    const savedEmail = localStorage.getItem('nirix_saved_email');
-    const savedRemember = localStorage.getItem('nirix_remember_me') === 'true';
-    
-    if (savedEmail && emailField) {
-      emailField.value = savedEmail;
-    }
-    
-    if (rememberMe) {
-      rememberMe.checked = savedRemember;
-    }
-  }
-
-  function saveCredentials(email) {
-    if (rememberMe && rememberMe.checked) {
-      localStorage.setItem('nirix_saved_email', email);
-      localStorage.setItem('nirix_remember_me', 'true');
-    } else {
-      localStorage.removeItem('nirix_saved_email');
-      localStorage.setItem('nirix_remember_me', 'false');
-    }
-  }
-
-  // =========================================================================
-  // FORM SUBMISSION (FIX-86)
-  // =========================================================================
-  async function handleSubmit(e) {
-    e.preventDefault();
-    
-    // Validate form
-    const isEmailValid = validateEmail();
-    const isPINValid = validatePIN();
-    
-    if (!isEmailValid || !isPINValid) {
-      showValidationError("Please fix the errors before submitting");
-      return;
-    }
-    
-    // Show loading state
-    setLoadingState(true);
-    
-    // Get form data
-    const formData = new FormData(loginForm);
-    const email = formData.get('email');
-    
-    // Save credentials if remember me is checked
-    saveCredentials(email);
-    
-    // Submit form
-    try {
-      // Use fetch for AJAX submission (optional)
-      // For now, just submit normally
-      loginForm.submit();
-    } catch (error) {
-      console.error('Login submission error:', error);
-      setLoadingState(false);
-      showValidationError('An error occurred during login');
-    }
-  }
-
-  function setLoadingState(isLoading) {
-    if (!loginBtn) return;
-    
-    const btnText = loginBtn.querySelector('.btn-text');
-    const btnSpinner = loginBtn.querySelector('.btn-spinner');
-    
-    if (isLoading) {
-      loginBtn.disabled = true;
-      if (btnText) btnText.classList.add('d-none');
-      if (btnSpinner) btnSpinner.classList.remove('d-none');
-    } else {
-      loginBtn.disabled = false;
-      if (btnText) btnText.classList.remove('d-none');
-      if (btnSpinner) btnSpinner.classList.add('d-none');
-    }
-  }
-
-  function showValidationError(message) {
-    // Create or update error alert
-    const existingAlert = document.querySelector('.alert-danger');
-    if (existingAlert) {
-      existingAlert.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
-    } else {
-      const alert = document.createElement('div');
-      alert.className = 'alert alert-danger';
-      alert.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
-      loginForm.parentNode.insertBefore(alert, loginForm);
-    }
-  }
-
-  // =========================================================================
-  // TOOLTIPS
-  // =========================================================================
-  function initializeTooltips() {
-    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
-      const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-      tooltips.forEach(el => new bootstrap.Tooltip(el));
-    }
-  }
-
-  // =========================================================================
-  // THEME PREFERENCE
-  // =========================================================================
-  function checkThemePreference() {
-    // Check if user has a theme preference in localStorage
-    const savedTheme = localStorage.getItem('nirix_theme');
-    if (savedTheme === 'dark' && !document.body.classList.contains('dark')) {
-      document.body.classList.add('dark');
-    }
-  }
-
-  // =========================================================================
-  // HARDWARE HELP
-  // =========================================================================
-  window.showHardwareHelp = function() {
-    const modal = new bootstrap.Modal(document.getElementById('hardwareHelpModal'));
-    modal.show();
-  };
-
-  // =========================================================================
-  // KEYBOARD SHORTCUTS
-  // =========================================================================
-  document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + L -> focus email
-    if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
-      e.preventDefault();
-      emailField?.focus();
-    }
-    
-    // Escape -> clear form
-    if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (loginForm && !loginBtn.disabled) {
-        if (confirm('Clear login form?')) {
-          loginForm.reset();
-          emailField?.focus();
-        }
-      }
-    }
+  toggle.addEventListener("click", () => {
+    field.type = (field.type === "password") ? "text" : "password";
   });
-
-  // =========================================================================
-  // PREVENT MULTIPLE SUBMISSIONS
-  // =========================================================================
-  let submitted = false;
-  loginForm.addEventListener('submit', function() {
-    if (submitted) {
-      e.preventDefault();
-      return false;
-    }
-    submitted = true;
-  });
-
-  // Initialize on DOM load
-  document.addEventListener('DOMContentLoaded', init);
 })();
 </script>
 {% endblock %}
