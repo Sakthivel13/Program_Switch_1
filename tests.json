@@ -1,3 +1,4 @@
+for live parameter,
 {
   "schema_version": "2.1.0",
   "vehicle": "TVS iQube ST",
@@ -7,123 +8,93 @@
   "tests": [
     {
       "id": "TVS_iQube_ST_BMS_LP_Voltage_STREAM",
-      "label": "Battery Pack Voltage",
-      "description": "Measure total battery pack voltage with limit validation",
-      "module_name": "battery_voltage",
+      "label": "Battery Voltage",
+      "description": "Measure Battery Voltage and validate limit",
+      "module_name": "Battery_Voltage",
       "function_name": "Battery_Voltage",
       "parameter_page_type": "LIVE_PARAMETER",
-      "button_name": "Start Monitor",
-      "sort_order": 1,
-      "version": "2.0",
-      "is_active": true,
-      "tags": ["battery", "voltage", "stream"],
-      "dependencies": [],
-      "output_limits": [
-        { 
-          "signal": "voltage", 
-          "lsl": 10.0, 
-          "usl": 13.6, 
-          "unit": "V" 
-        }
-      ],
-      "execution": { 
-        "mode": "stream", 
-        "supports_run_all": true, 
-        "timeout_sec": 0,
-        "max_retries": 1,
-        "retry_delay_sec": 0.5,
-        "retry_on_timeout": false,
-        "retry_on_exception": false,
-        "requires_confirmation": false,
-        "requires_hardware": true
-      }
-    },
-    {
-      "id": "TVS_iQube_ST_BMS_LP_Current_STREAM",
-      "label": "Battery Current",
-      "description": "Monitor battery charge/discharge current",
-      "module_name": "battery_current",
-      "function_name": "Battery_Current",
-      "parameter_page_type": "LIVE_PARAMETER",
-      "button_name": "Monitor",
+      "button_name": "Apply",
       "sort_order": 2,
       "version": "1.0",
       "is_active": true,
-      "tags": ["battery", "current", "stream"],
-      "dependencies": [],
       "output_limits": [
-        { 
-          "signal": "current", 
-          "lsl": -200, 
-          "usl": 200, 
-          "unit": "A" 
-        }
+        { "signal": "voltage", "lsl": 10, "usl": 15, "unit": "V" }
       ],
-      "execution": { 
-        "mode": "stream", 
-        "supports_run_all": true, 
-        "timeout_sec": 0,
-        "max_retries": 1,
-        "retry_delay_sec": 0.5,
-        "requires_hardware": true
-      }
+      "execution": { "mode": "stream", "supports_run_all": true, "timeout_sec": 15 }
     },
     {
-      "id": "TVS_iQube_ST_BMS_LP_SoC_STREAM",
-      "label": "State of Charge",
-      "description": "Battery percentage remaining",
-      "module_name": "battery_soc",
-      "function_name": "Battery_SoC",
+      "id": "TVS_iQube_ST_BMS_LP_Photosensor_STREAM",
+      "label": "Photosensor",
+      "description": "Read Photosensor Value",
+      "module_name": "Read_Photosensor",
+      "function_name": "Read_Photosensor",
       "parameter_page_type": "LIVE_PARAMETER",
-      "button_name": "Read SoC",
-      "sort_order": 3,
+      "button_name": "Read",
+      "sort_order": 1,
       "version": "1.0",
       "is_active": true,
-      "tags": ["battery", "soc", "stream"],
-      "dependencies": [],
       "output_limits": [
-        { 
-          "signal": "soc", 
-          "lsl": 0, 
-          "usl": 100, 
-          "unit": "%" 
-        }
+        { "signal": "Light_Focus", "lsl": 80, "usl": 200, "unit": "%"}
       ],
-      "execution": { 
-        "mode": "stream", 
-        "supports_run_all": true, 
-        "timeout_sec": 0,
-        "max_retries": 1,
-        "requires_hardware": true
-      }
-    },
+      "execution": { "mode": "stream", "supports_run_all": true, "timeout_sec": 15 }
+    }
+  ]
+}
+
+
+
+for write_data_identifier,
+{
+  "schema_version": "2.1.0",
+  "vehicle": "TVS iQube ST",
+  "section": "diagnostics",
+  "ecu": "BMS",
+  "parameter": "WRITE_DATA_IDENTIFIER",
+
+  "tests": [
     {
-      "id": "TVS_iQube_ST_BMS_LP_Temperature_STREAM",
-      "label": "Battery Temperature",
-      "description": "Average battery pack temperature",
-      "module_name": "battery_temp",
-      "function_name": "Battery_Temperature",
-      "parameter_page_type": "LIVE_PARAMETER",
-      "button_name": "Monitor",
-      "sort_order": 4,
+      "id": "TVS_iQube_ST_BMS_LP_Write_MAC_Front_SINGLE",
+      "label": "Write_TPMS_Front",
+      "description": "Writes the TPMS Front sensor MAC address to the ECU.",
+      "module_name": "Write_TPMS_Front",
+      "function_name": "Write_TPMS_Front",
+      "parameter_page_type": "WRITE_DATA_IDENTIFIER",
+      "button_name": "Write",
+      "function_role": null,
       "version": "1.0",
       "is_active": true,
-      "tags": ["battery", "temperature", "stream"],
-      "dependencies": [],
-      "output_limits": [
-        { 
-          "signal": "temperature", 
-          "lsl": 0, 
-          "usl": 60, 
-          "unit": "°C" 
+      "sort_order": 1,
+
+      "inputs": [
+        {
+          "name": "front_mac",
+          "label": "Front Sensor MAC",
+          "input_type": "hex",
+          "length": 12,
+          "min_value": null,
+          "max_value": null,
+          "enum_values": null,
+          "default_value": null,
+          "format_hint": "12 hex chars (e.g., C03687540000)",
+          "is_required": true,
+          "config_key": "tpms.front.mac",
+          "sort_order": 1
         }
       ],
-      "execution": { 
-        "mode": "stream", 
-        "supports_run_all": true, 
-        "timeout_sec": 0,
-        "requires_hardware": true
-      }
+
+      "output_limits": [],
+
+      "execution": {
+        "mode": "single",
+        "supports_run_all": false,
+        "timeout_sec": 15,
+        "max_retries": 3,
+        "retry_delay_sec": 1.5,
+        "retry_on_timeout": false,
+        "retry_on_exception": false
+      },
+
+      "flashing": null
     }
   ]
 }
