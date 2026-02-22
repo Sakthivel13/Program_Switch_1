@@ -3,688 +3,107 @@
 
 {% block head %}
 <style>
-  /* ===================== DASHBOARD SPECIFIC STYLES ===================== */
-  :root {
-    --card-hover-transform: translateY(-4px);
-    --card-transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    --grid-gap: 1.25rem;
-  }
-
-  .dashboard-header {
-    background: linear-gradient(135deg, var(--tvs-blue) 0%, #1e4a8c 100%);
-    border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    color: white;
-    box-shadow: var(--shadow);
-  }
-
-  .dashboard-header h1 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0;
-  }
-
-  .dashboard-header p {
-    opacity: 0.9;
-    margin: 0.5rem 0 0 0;
-    font-size: 0.95rem;
-  }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
-  }
-
-  .stat-card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 1.25rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    transition: var(--card-transition);
-  }
-
-  .stat-card:hover {
-    transform: var(--card-hover-transform);
-    box-shadow: var(--shadow-hover);
-  }
-
-  .stat-icon {
-    width: 48px;
-    height: 48px;
+  .card-shadow {
+    box-shadow: 0 0.25rem 0.75rem rgba(15,23,42,.15);
     border-radius: 12px;
-    background: rgba(20, 59, 104, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: var(--tvs-blue);
+    border: 1px solid rgba(148,163,184,.3);
+    background: #ffffff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
 
-  body.dark .stat-icon {
-    background: rgba(255, 255, 255, 0.1);
-    color: #60a5fa;
+  body.dark .card-shadow {
+    background: #1e293b;
+    border-color: rgba(255,255,255,.08);
   }
 
-  .stat-content h3 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin: 0;
-    line-height: 1.2;
+  .card-shadow:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0.75rem 1.25rem rgba(15,23,42,.2);
   }
 
-  .stat-content p {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--muted-text);
+  .vehicle-card-img {
+    max-height: 150px;
+    object-fit: contain;
+    background: #f8fafc;
+    border-bottom: 1px solid rgba(148,163,184,.3);
   }
 
-  .filter-section {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    transition: var(--card-transition);
+  body.dark .vehicle-card-img {
+    background: #0f172a;
   }
 
-  .filter-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1.25rem;
-    font-weight: 600;
-    color: var(--text-main);
-  }
-
-  .filter-title i {
-    color: var(--tvs-blue);
-  }
-
-  .filter-badge {
-    background: var(--tvs-blue);
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    margin-left: 0.5rem;
-  }
-
-  .filter-reset-btn {
-    color: var(--muted-text);
+  .vehicle-link {
     text-decoration: none;
-    font-size: 0.85rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    transition: color 0.2s;
-  }
-
-  .filter-reset-btn:hover {
-    color: var(--tvs-blue);
-  }
-
-  .vehicles-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--grid-gap);
-    margin-top: 1.5rem;
-  }
-
-  .vehicle-card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    overflow: hidden;
-    transition: var(--card-transition);
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-  }
-
-  .vehicle-card:hover {
-    transform: var(--card-hover-transform);
-    box-shadow: var(--shadow-hover);
-    border-color: var(--tvs-blue-light);
-  }
-
-  .vehicle-card-image {
-    height: 160px;
-    background: linear-gradient(135deg, #e2e8f0, #f8fafc);
-    position: relative;
-    overflow: hidden;
-  }
-
-  body.dark .vehicle-card-image {
-    background: linear-gradient(135deg, #1e293b, #0f172a);
-  }
-
-  .vehicle-card-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.3s ease;
-  }
-
-  .vehicle-card:hover .vehicle-card-image img {
-    transform: scale(1.05);
-  }
-
-  .vehicle-card-badge {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    background: var(--tvs-blue);
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    z-index: 1;
-  }
-
-  .vehicle-card-content {
-    padding: 1.25rem;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .vehicle-card-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem 0;
-    color: var(--text-main);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .vehicle-card-title i {
-    color: var(--tvs-blue);
-    font-size: 1rem;
-  }
-
-  .vehicle-card-description {
-    color: var(--muted-text);
-    font-size: 0.9rem;
-    margin-bottom: 1rem;
-    line-height: 1.4;
-    flex: 1;
-  }
-
-  .vehicle-card-details {
-    background: var(--bg-main);
-    border-radius: 12px;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-    font-size: 0.85rem;
-  }
-
-  .vehicle-card-detail-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.25rem 0;
-  }
-
-  .vehicle-card-detail-item:not(:last-child) {
-    border-bottom: 1px dashed var(--border-color);
-  }
-
-  .detail-label {
-    color: var(--muted-text);
-    font-weight: 500;
-  }
-
-  .detail-value {
-    font-weight: 600;
-    color: var(--text-main);
-  }
-
-  .vin-pattern {
-    font-family: 'Courier New', monospace;
-    font-size: 0.8rem;
-    background: var(--card-bg);
-    padding: 0.25rem 0.5rem;
-    border-radius: 6px;
-    letter-spacing: 1px;
-  }
-
-  .vehicle-card-footer {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: auto;
-  }
-
-  .btn-card {
-    flex: 1;
-    padding: 0.6rem;
-    border-radius: 12px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    transition: all 0.2s;
-    text-decoration: none;
-  }
-
-  .btn-card-primary {
-    background: var(--tvs-blue);
-    color: white;
-    border: none;
-  }
-
-  .btn-card-primary:hover {
-    background: var(--tvs-blue-hover);
-    color: white;
-    transform: translateY(-2px);
-  }
-
-  .btn-card-outline {
-    background: transparent;
-    color: var(--text-main);
-    border: 1px solid var(--border-color);
-  }
-
-  .btn-card-outline:hover {
-    background: var(--bg-main);
-    border-color: var(--tvs-blue);
-    color: var(--tvs-blue);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    background: var(--card-bg);
-    border-radius: 20px;
-    border: 1px solid var(--border-color);
-  }
-
-  .empty-state i {
-    font-size: 4rem;
-    color: var(--muted-text);
-    margin-bottom: 1rem;
-    opacity: 0.5;
-  }
-
-  .empty-state h3 {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-  }
-
-  .empty-state p {
-    color: var(--muted-text);
-    margin-bottom: 1.5rem;
-  }
-
-  .loading-skeleton {
-    background: linear-gradient(90deg, 
-      var(--border-color) 25%, 
-      var(--card-bg) 50%, 
-      var(--border-color) 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-    border-radius: 8px;
+    color: inherit;
+    display: block;
     height: 100%;
   }
 
-  @keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  .recent-activity {
-    margin-top: 3rem;
-    background: var(--card-bg);
-    border-radius: 20px;
-    border: 1px solid var(--border-color);
-    padding: 1.5rem;
-  }
-
-  .recent-activity h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: 1.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .activity-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .activity-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem;
+  .vehicle-link:focus-visible {
+    outline: 2px solid #0d6efd;
+    outline-offset: 3px;
     border-radius: 12px;
-    background: var(--bg-main);
-    transition: var(--card-transition);
-  }
-
-  .activity-item:hover {
-    transform: translateX(4px);
-  }
-
-  .activity-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--tvs-blue);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.9rem;
-  }
-
-  .activity-content {
-    flex: 1;
-  }
-
-  .activity-title {
-    font-weight: 600;
-    font-size: 0.9rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .activity-meta {
-    font-size: 0.75rem;
-    color: var(--muted-text);
-    display: flex;
-    gap: 1rem;
-  }
-
-  .activity-badge {
-    background: var(--tvs-blue-light);
-    color: white;
-    padding: 0.2rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-  }
-
-  /* Quick filter chips */
-  .filter-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 1rem;
-  }
-
-  .filter-chip {
-    padding: 0.4rem 1rem;
-    border-radius: 999px;
-    background: var(--bg-main);
-    border: 1px solid var(--border-color);
-    color: var(--text-main);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .filter-chip:hover {
-    background: var(--tvs-blue);
-    color: white;
-    border-color: var(--tvs-blue);
-  }
-
-  .filter-chip.active {
-    background: var(--tvs-blue);
-    color: white;
-    border-color: var(--tvs-blue);
-  }
-
-  .filter-chip i {
-    font-size: 0.75rem;
-  }
-
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-    .dashboard-header h1 {
-      font-size: 1.4rem;
-    }
-    
-    .vehicles-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .filter-section .row {
-      flex-direction: column;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .stats-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .vehicle-card-footer {
-      flex-direction: column;
-    }
-  }
-
-  /* Animation for new vehicles */
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .vehicle-card {
-    animation: fadeIn 0.5s ease-out;
-    animation-fill-mode: both;
-  }
-
-  .vehicles-grid .vehicle-card:nth-child(1) { animation-delay: 0.1s; }
-  .vehicles-grid .vehicle-card:nth-child(2) { animation-delay: 0.2s; }
-  .vehicles-grid .vehicle-card:nth-child(3) { animation-delay: 0.3s; }
-  .vehicles-grid .vehicle-card:nth-child(4) { animation-delay: 0.4s; }
-  .vehicles-grid .vehicle-card:nth-child(5) { animation-delay: 0.5s; }
-  .vehicles-grid .vehicle-card:nth-child(6) { animation-delay: 0.6s; }
-
-  /* Tooltip styles */
-  .tooltip-icon {
-    cursor: help;
-    border-bottom: 1px dotted var(--muted-text);
-  }
-
-  /* Recent searches */
-  .recent-searches {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border-color);
-  }
-
-  .recent-search-item {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.75rem;
-    background: var(--bg-main);
-    border-radius: 999px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .recent-search-item:hover {
-    background: var(--tvs-blue);
-    color: white;
   }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-12 col-xl-11">
+  <div class="col-11 col-xl-11">
 
     <!-- =====================================================
-         DASHBOARD HEADER
+         HEADER
     ====================================================== -->
-    <div class="dashboard-header">
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-          <h1>
-            <i class="fas fa-tachometer-alt me-2"></i>
-            Vehicle Dashboard
-          </h1>
-          <p>Select a vehicle to begin diagnostics or view recent activity</p>
-        </div>
-        <div class="d-flex gap-2">
-          <span class="user-badge">
-            <i class="fas fa-user me-1"></i>{{ user.name }}
-          </span>
-          <span class="user-badge">
-            <i class="fas fa-key me-1"></i>{{ user.role|capitalize }}
-          </span>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h5 class="mb-0 fw-bold">Vehicle Selection</h5>
+        <div class="small text-muted">
+          Vehicles you are authorized to access
         </div>
       </div>
     </div>
 
     <!-- =====================================================
-         STATISTICS CARDS
+         FILTERS
     ====================================================== -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon">
-          <i class="fas fa-car"></i>
-        </div>
-        <div class="stat-content">
-          <h3 id="vehicleCount">{{ vehicles|length }}</h3>
-          <p>Available Vehicles</p>
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-icon">
-          <i class="fas fa-flask"></i>
-        </div>
-        <div class="stat-content">
-          <h3 id="testCount">-</h3>
-          <p>Total Tests</p>
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-icon">
-          <i class="fas fa-history"></i>
-        </div>
-        <div class="stat-content">
-          <h3 id="recentTests">-</h3>
-          <p>Tests Today</p>
-        </div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-icon">
-          <i class="fas fa-check-circle"></i>
-        </div>
-        <div class="stat-content">
-          <h3 id="passRate">-</h3>
-          <p>Pass Rate</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- =====================================================
-         FILTER SECTION
-    ====================================================== -->
-    <div class="filter-section">
-      <div class="filter-title">
-        <i class="fas fa-filter"></i>
-        Filter Vehicles
-        {% if vin or search or selected_category %}
-          <span class="filter-badge">Active Filters</span>
-        {% endif %}
-      </div>
-
+    <div class="card card-shadow p-3 mb-3">
       <form id="filterForm" method="get" action="{{ url_for('dashboard') }}">
-        <div class="row g-3">
+        <div class="row g-2">
+
           <!-- VIN FILTER -->
           <div class="col-12 col-md-4">
-            <label class="form-label small fw-semibold">
-              <i class="fas fa-barcode me-1"></i>VIN Filter
-            </label>
-            <div class="input-group">
-              <span class="input-group-text bg-transparent">
-                <i class="fas fa-search"></i>
-              </span>
-              <input
-                name="vin"
-                id="vinInput"
-                type="text"
-                class="form-control"
-                value="{{ vin or '' }}"
-                placeholder="Enter VIN (partial allowed)"
-                maxlength="17"
-                autocomplete="off"
-                pattern="[A-HJ-NPR-Z0-9]{0,17}"
-                title="VIN can contain letters and numbers, excluding I,O,Q">
-            </div>
-            <div class="form-text small">
-              <i class="fas fa-info-circle me-1"></i>
-              VIN excludes I, O, Q
-            </div>
+            <label class="form-label small mb-1">VIN Filter</label>
+            <input
+              name="vin"
+              id="vinInput"
+              type="text"
+              class="form-control form-control-sm"
+              value="{{ vin or '' }}"
+              placeholder="VIN (partial allowed)"
+              maxlength="17"
+              autocomplete="off">
           </div>
 
           <!-- MODEL SEARCH -->
           <div class="col-12 col-md-4">
-            <label class="form-label small fw-semibold">
-              <i class="fas fa-tag me-1"></i>Search Model
-            </label>
-            <div class="input-group">
-              <span class="input-group-text bg-transparent">
-                <i class="fas fa-search"></i>
-              </span>
-              <input
-                name="search"
-                id="searchInput"
-                type="text"
-                class="form-control"
-                value="{{ search or '' }}"
-                placeholder="Vehicle model name"
-                autocomplete="off"
-                list="recentSearches">
-              <datalist id="recentSearches"></datalist>
-            </div>
+            <label class="form-label small mb-1">Search Model</label>
+            <input
+              name="search"
+              id="searchInput"
+              type="text"
+              class="form-control form-control-sm"
+              value="{{ search or '' }}"
+              placeholder="Model name"
+              autocomplete="off">
           </div>
 
           <!-- CATEGORY -->
           <div class="col-12 col-md-4">
-            <label class="form-label small fw-semibold">
-              <i class="fas fa-layer-group me-1"></i>Category
-            </label>
+            <label class="form-label small mb-1">Category</label>
             <select
               name="category"
               id="categorySelect"
-              class="form-select">
+              class="form-select form-select-sm">
               <option value="">All Categories</option>
               {% for cat in categories %}
                 <option value="{{ cat }}"
@@ -695,283 +114,89 @@
             </select>
           </div>
 
-          <!-- FILTER ACTIONS -->
-          <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-tvs">
-                  <i class="fas fa-filter me-2"></i>Apply Filters
-                </button>
-                <a href="{{ url_for('dashboard') }}"
-                   class="btn btn-outline-secondary filter-reset-btn">
-                  <i class="fas fa-times me-1"></i>Clear All
-                </a>
-              </div>
-              
-              {% if vin or search or selected_category %}
-                <span class="text-muted small">
-                  <i class="fas fa-info-circle me-1"></i>
-                  Showing filtered results
-                </span>
-              {% endif %}
-            </div>
+          <!-- RESET -->
+          <div class="col-12 d-flex justify-content-end mt-1">
+            <a href="{{ url_for('dashboard') }}"
+               class="btn btn-sm btn-outline-secondary">
+              Reset Filters
+            </a>
           </div>
+
         </div>
       </form>
-
-      <!-- Quick Filter Chips -->
-      {% if categories %}
-      <div class="filter-chips">
-        <span class="small text-muted me-2">
-          <i class="fas fa-bolt me-1"></i>Quick filters:
-        </span>
-        <a href="{{ url_for('dashboard') }}" 
-           class="filter-chip {% if not selected_category %}active{% endif %}">
-          <i class="fas fa-asterisk"></i> All
-        </a>
-        {% for cat in categories[:5] %}
-          <a href="{{ url_for('dashboard', category=cat) }}" 
-             class="filter-chip {% if selected_category == cat %}active{% endif %}">
-            <i class="fas fa-tag"></i> {{ cat }}
-          </a>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      <!-- Recent Searches (saved in localStorage) -->
-      <div id="recentSearchesContainer" class="recent-searches" style="display: none;">
-        <span class="small text-muted">
-          <i class="fas fa-history me-1"></i>Recent:
-        </span>
-        <div id="recentSearchItems"></div>
-      </div>
     </div>
 
     <!-- =====================================================
          VEHICLE GRID
     ====================================================== -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0 fw-bold">
-        <i class="fas fa-car me-2"></i>
-        Available Vehicles
-        <span class="badge bg-secondary ms-2">{{ vehicles|length }}</span>
-      </h5>
-      
-      <div class="dropdown">
-        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
-                type="button" data-bs-toggle="dropdown">
-          <i class="fas fa-sort me-1"></i>Sort By
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="#" data-sort="name">Name</a></li>
-          <li><a class="dropdown-item" href="#" data-sort="category">Category</a></li>
-          <li><a class="dropdown-item" href="#" data-sort="recent">Recently Used</a></li>
-        </ul>
-      </div>
-    </div>
+    <div class="row g-3" id="vehicleGrid">
 
-    <div class="vehicles-grid" id="vehicleGrid">
       {% if vehicles %}
         {% for v in vehicles %}
-        <div class="vehicle-card" 
-             data-vehicle-id="{{ v.id }}"
-             data-vehicle-name="{{ v.name }}"
-             data-vehicle-category="{{ v.category }}"
-             data-vehicle-sort-name="{{ v.name|lower }}"
-             data-vehicle-sort-category="{{ v.category|lower }}">
-          
-          <!-- Vehicle Image -->
-          <div class="vehicle-card-image">
-            {% if v.image_filename %}
-              <img src="{{ url_for('vehicle_image', filename=v.image_filename) }}" 
-                   alt="{{ v.name }}"
-                   loading="lazy">
-            {% else %}
-              <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-                <i class="fas fa-car fa-3x" style="color: var(--muted-text); opacity:0.5;"></i>
-              </div>
-            {% endif %}
-            
-            <!-- Category Badge -->
-            {% if v.category %}
-              <span class="vehicle-card-badge">
-                <i class="fas fa-tag me-1"></i>{{ v.category }}
-              </span>
-            {% endif %}
-          </div>
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
 
-          <!-- Vehicle Content -->
-          <div class="vehicle-card-content">
-            <h3 class="vehicle-card-title">
-              <i class="fas fa-car"></i>
-              {{ v.name }}
-            </h3>
-            
-            {% if v.description %}
-              <div class="vehicle-card-description">
-                {{ v.description }}
-              </div>
-            {% endif %}
+          <a href="{{ url_for('tests_page', model_name=v.name) }}"
+             class="vehicle-link">
 
-            <!-- Vehicle Details -->
-            <div class="vehicle-card-details">
-              {% if v.vin_pattern %}
-              <div class="vehicle-card-detail-item">
-                <span class="detail-label">
-                  <i class="fas fa-barcode me-1"></i>VIN Pattern:
-                </span>
-                <span class="detail-value vin-pattern">{{ v.vin_pattern }}</span>
-              </div>
+            <div class="card card-shadow h-100 d-flex flex-column">
+
+              {% if v.image_filename %}
+                <img
+                  src="{{ url_for('vehicle_image', filename=v.image_filename) }}"
+                  class="vehicle-card-img"
+                  alt="{{ v.name }}">
               {% endif %}
-              
-              <div class="vehicle-card-detail-item">
-                <span class="detail-label">
-                  <i class="fas fa-folder me-1"></i>Category:
-                </span>
-                <span class="detail-value">{{ v.category }}</span>
-              </div>
-              
-              <div class="vehicle-card-detail-item">
-                <span class="detail-label">
-                  <i class="fas fa-flask me-1"></i>Available Tests:
-                </span>
-                <span class="detail-value" data-test-count="{{ v.id }}">Loading...</span>
+
+              <div class="card-body p-2 d-flex flex-column">
+
+                <h6 class="text-truncate mb-1" title="{{ v.name }}">
+                  {{ v.name }}
+                </h6>
+
+                {% if v.description %}
+                  <div class="small text-muted text-truncate"
+                       title="{{ v.description }}">
+                    {{ v.description }}
+                  </div>
+                {% endif %}
+
+                {% if v.vin_pattern %}
+                  <div class="small text-muted mt-1">
+                    VIN Pattern:
+                    <strong>{{ v.vin_pattern }}</strong>
+                  </div>
+                {% endif %}
+
+                <div class="btn btn-sm btn-tvs w-100 mt-auto disabled"
+                     style="border-radius:8px; pointer-events:none;">
+                  Open Test Sequence →
+                </div>
+
               </div>
             </div>
 
-            <!-- Action Buttons -->
-            <div class="vehicle-card-footer">
-              <a href="{{ url_for('tests_page', model_name=v.name) }}" 
-                 class="btn-card btn-card-primary"
-                 title="Open diagnostics for {{ v.name }}">
-                <i class="fas fa-play"></i>
-                <span>Start Diagnostics</span>
-              </a>
-              
-              <button class="btn-card btn-card-outline" 
-                      onclick="showVehicleInfo('{{ v.id }}')"
-                      title="View vehicle information">
-                <i class="fas fa-info-circle"></i>
-              </button>
-            </div>
-          </div>
+          </a>
         </div>
         {% endfor %}
       {% else %}
-        <!-- Empty State -->
-        <div class="empty-state">
-          <i class="fas fa-car"></i>
-          <h3>No Vehicles Found</h3>
-          <p>
-            {% if vin or search or selected_category %}
-              No vehicles match your filter criteria. Try adjusting your filters.
-            {% else %}
-              No vehicle models are available for your account.
-            {% endif %}
-          </p>
-          {% if vin or search or selected_category %}
-            <a href="{{ url_for('dashboard') }}" class="btn btn-tvs">
-              <i class="fas fa-times me-2"></i>Clear Filters
-            </a>
-          {% endif %}
+        <div class="col-12">
+          <div class="alert alert-warning">
+            No vehicle models are available for your account
+            or match the applied filters.
+          </div>
         </div>
       {% endif %}
+
     </div>
 
-    <!-- =====================================================
-         RECENT ACTIVITY (FIX-70)
-    ====================================================== -->
-    {% if vehicles %}
-    <div class="recent-activity" id="recentActivity">
-      <h2>
-        <i class="fas fa-history"></i>
-        Recent Activity
-        <span class="badge bg-secondary ms-2" id="activityCount">0</span>
-      </h2>
-      <div class="activity-list" id="activityList">
-        <div class="text-center text-muted py-3">
-          <i class="fas fa-spinner fa-spin me-2"></i>Loading recent activity...
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-  </div>
-</div>
-
-<!-- Vehicle Info Modal -->
-<div class="modal fade" id="vehicleInfoModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">
-          <i class="fas fa-info-circle me-2"></i>
-          Vehicle Information
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="vehicleInfoContent">
-        Loading...
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Quick Actions Modal -->
-<div class="modal fade" id="quickActionsModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">
-          <i class="fas fa-bolt me-2"></i>
-          Quick Actions
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="list-group">
-          <a href="#" class="list-group-item list-group-item-action" onclick="runAllDiagnostics()">
-            <i class="fas fa-play-circle me-2"></i>
-            Run All Diagnostics
-          </a>
-          <a href="#" class="list-group-item list-group-item-action" onclick="viewReports()">
-            <i class="fas fa-file-alt me-2"></i>
-            View Reports
-          </a>
-          <a href="#" class="list-group-item list-group-item-action" onclick="exportData()">
-            <i class="fas fa-download me-2"></i>
-            Export Data
-          </a>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// ===========================================================================
-// DASHBOARD JAVASCRIPT (FIX-70 ENHANCED)
-// ===========================================================================
-
 document.addEventListener("DOMContentLoaded", () => {
-  initializeDashboard();
-  loadStatistics();
-  loadRecentActivity();
-  initializeSorting();
-  initializeRecentSearches();
-  initializeTestCounts();
-});
 
-// ===========================================================================
-// INITIALIZATION
-// ===========================================================================
-
-function initializeDashboard() {
   const form = document.getElementById("filterForm");
   const vinInput = document.getElementById("vinInput");
   const searchInput = document.getElementById("searchInput");
@@ -979,386 +204,34 @@ function initializeDashboard() {
 
   if (!form) return;
 
-  // VIN input auto-uppercase and filtering
+  /* VIN → uppercase only */
   if (vinInput) {
-    vinInput.addEventListener("input", (e) => {
-      // Auto uppercase and filter invalid chars
-      e.target.value = e.target.value.toUpperCase().replace(/[IOQ]/g, '');
-    });
-
-    vinInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        applyFilters();
-      }
+    vinInput.addEventListener("input", () => {
+      vinInput.value = vinInput.value.toUpperCase();
     });
   }
 
-  // Search input with debounce
-  if (searchInput) {
-    let searchTimeout;
-    searchInput.addEventListener("input", (e) => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        if (e.target.value.length >= 2 || e.target.value.length === 0) {
-          applyFilters();
-        }
-      }, 500);
-    });
+  /* Submit on ENTER only */
+  function submitOnEnter(e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    if (vinInput) vinInput.value = vinInput.value.trim();
+    if (searchInput) searchInput.value = searchInput.value.trim();
+
+    form.submit();
   }
 
-  // Category auto-submit
+  if (vinInput) vinInput.addEventListener("keydown", submitOnEnter);
+  if (searchInput) searchInput.addEventListener("keydown", submitOnEnter);
+
+  /* Category → auto submit */
   if (categorySelect) {
     categorySelect.addEventListener("change", () => {
-      applyFilters();
+      form.submit();
     });
   }
 
-  // Save searches to recent
-  if (searchInput) {
-    searchInput.addEventListener("blur", () => {
-      if (searchInput.value.trim()) {
-        saveRecentSearch(searchInput.value.trim());
-      }
-    });
-  }
-}
-
-// ===========================================================================
-// FILTER FUNCTIONS
-// ===========================================================================
-
-function applyFilters() {
-  const form = document.getElementById("filterForm");
-  if (form) form.submit();
-}
-
-function clearFilters() {
-  window.location.href = "{{ url_for('dashboard') }}";
-}
-
-// Recent searches (localStorage)
-function saveRecentSearch(query) {
-  if (!query) return;
-  
-  let searches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-  searches = [query, ...searches.filter(s => s !== query)].slice(0, 5);
-  localStorage.setItem('recentSearches', JSON.stringify(searches));
-  updateRecentSearchesUI();
-}
-
-function initializeRecentSearches() {
-  updateRecentSearchesUI();
-  
-  // Load recent searches into datalist
-  const searches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-  const datalist = document.getElementById('recentSearches');
-  if (datalist) {
-    datalist.innerHTML = searches.map(s => `<option value="${s}">`).join('');
-  }
-}
-
-function updateRecentSearchesUI() {
-  const container = document.getElementById('recentSearchesContainer');
-  const itemsContainer = document.getElementById('recentSearchItems');
-  
-  if (!container || !itemsContainer) return;
-  
-  const searches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-  
-  if (searches.length > 0) {
-    container.style.display = 'flex';
-    itemsContainer.innerHTML = searches.map(s => 
-      `<span class="recent-search-item" onclick="document.getElementById('searchInput').value='${s}';applyFilters()">
-         ${s}
-       </span>`
-    ).join('');
-  } else {
-    container.style.display = 'none';
-  }
-}
-
-// ===========================================================================
-// STATISTICS LOADING (FIX-70)
-// ===========================================================================
-
-async function loadStatistics() {
-  try {
-    const response = await fetch('/api/runner/stats');
-    const data = await response.json();
-    
-    // Update test count
-    const testCountEl = document.getElementById('testCount');
-    if (testCountEl) {
-      const totalTests = data.tasks?.total || 0;
-      testCountEl.textContent = totalTests;
-    }
-    
-    // Update recent tests
-    const recentTestsEl = document.getElementById('recentTests');
-    if (recentTestsEl) {
-      // You can fetch this from a separate endpoint
-      recentTestsEl.textContent = '24'; // Placeholder
-    }
-    
-    // Update pass rate
-    const passRateEl = document.getElementById('passRate');
-    if (passRateEl) {
-      // Calculate from stats
-      const tasks = data.tasks?.by_status || {};
-      const completed = tasks.COMPLETED || 0;
-      const failed = tasks.ERROR || 0;
-      const total = completed + failed;
-      const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
-      passRateEl.textContent = rate + '%';
-    }
-  } catch (error) {
-    console.error('Failed to load statistics:', error);
-  }
-}
-
-// ===========================================================================
-// RECENT ACTIVITY (FIX-70)
-// ===========================================================================
-
-async function loadRecentActivity() {
-  const activityList = document.getElementById('activityList');
-  const activityCount = document.getElementById('activityCount');
-  
-  if (!activityList) return;
-  
-  try {
-    const response = await fetch('/api/recent_activity?limit=5');
-    const data = await response.json();
-    
-    if (data.activities && data.activities.length > 0) {
-      activityList.innerHTML = data.activities.map(activity => `
-        <div class="activity-item">
-          <div class="activity-icon">
-            <i class="fas fa-${activity.icon || 'flask'}"></i>
-          </div>
-          <div class="activity-content">
-            <div class="activity-title">${activity.title}</div>
-            <div class="activity-meta">
-              <span><i class="far fa-clock me-1"></i>${activity.time}</span>
-              <span><i class="fas fa-car me-1"></i>${activity.vehicle}</span>
-              ${activity.status ? `<span class="activity-badge">${activity.status}</span>` : ''}
-            </div>
-          </div>
-        </div>
-      `).join('');
-      
-      if (activityCount) {
-        activityCount.textContent = data.activities.length;
-      }
-    } else {
-      activityList.innerHTML = `
-        <div class="text-center text-muted py-3">
-          <i class="fas fa-history me-2"></i>No recent activity
-        </div>
-      `;
-    }
-  } catch (error) {
-    console.error('Failed to load recent activity:', error);
-    activityList.innerHTML = `
-      <div class="text-center text-muted py-3">
-        <i class="fas fa-exclamation-triangle me-2"></i>Failed to load activity
-      </div>
-    `;
-  }
-}
-
-// ===========================================================================
-// TEST COUNTS PER VEHICLE
-// ===========================================================================
-
-async function initializeTestCounts() {
-  const testCountElements = document.querySelectorAll('[data-test-count]');
-  
-  for (const el of testCountElements) {
-    const vehicleId = el.getAttribute('data-test-count');
-    try {
-      const response = await fetch(`/api/vehicle/${vehicleId}/test_count`);
-      const data = await response.json();
-      el.textContent = data.count || 0;
-    } catch (error) {
-      console.error(`Failed to load test count for vehicle ${vehicleId}:`, error);
-      el.textContent = 'N/A';
-    }
-  }
-}
-
-// ===========================================================================
-// SORTING FUNCTIONALITY
-// ===========================================================================
-
-function initializeSorting() {
-  const sortLinks = document.querySelectorAll('.dropdown-item[data-sort]');
-  
-  sortLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const sortBy = link.dataset.sort;
-      sortVehicles(sortBy);
-    });
-  });
-}
-
-function sortVehicles(by) {
-  const grid = document.getElementById('vehicleGrid');
-  const cards = Array.from(grid.children);
-  
-  cards.sort((a, b) => {
-    const aVal = a.dataset[`vehicleSort${by.charAt(0).toUpperCase() + by.slice(1)}`];
-    const bVal = b.dataset[`vehicleSort${by.charAt(0).toUpperCase() + by.slice(1)}`];
-    
-    if (by === 'recent') {
-      // For recent, we'd need last accessed time
-      return 0;
-    }
-    
-    return aVal.localeCompare(bVal);
-  });
-  
-  // Reappend in sorted order
-  cards.forEach(card => grid.appendChild(card));
-}
-
-// ===========================================================================
-// VEHICLE INFO MODAL
-// ===========================================================================
-
-async function showVehicleInfo(vehicleId) {
-  const modal = new bootstrap.Modal(document.getElementById('vehicleInfoModal'));
-  const content = document.getElementById('vehicleInfoContent');
-  
-  content.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
-  modal.show();
-  
-  try {
-    const response = await fetch(`/api/vehicle/${vehicleId}/info`);
-    const data = await response.json();
-    
-    content.innerHTML = `
-      <div class="vehicle-info">
-        <div class="text-center mb-3">
-          <img src="${data.image || '/static/img/default-vehicle.png'}" 
-               alt="${data.name}"
-               style="max-height: 120px; border-radius: 8px;">
-        </div>
-        
-        <table class="table table-sm">
-          <tr>
-            <th>Name:</th>
-            <td>${data.name}</td>
-          </tr>
-          <tr>
-            <th>Category:</th>
-            <td>${data.category}</td>
-          </tr>
-          <tr>
-            <th>Description:</th>
-            <td>${data.description || 'N/A'}</td>
-          </tr>
-          <tr>
-            <th>VIN Pattern:</th>
-            <td><code>${data.vin_pattern || 'N/A'}</code></td>
-          </tr>
-          <tr>
-            <th>Total Tests:</th>
-            <td>${data.test_count || 0}</td>
-          </tr>
-          <tr>
-            <th>Last Accessed:</th>
-            <td>${data.last_accessed || 'Never'}</td>
-          </tr>
-        </table>
-      </div>
-    `;
-  } catch (error) {
-    content.innerHTML = '<div class="alert alert-danger">Failed to load vehicle information</div>';
-  }
-}
-
-// ===========================================================================
-// QUICK ACTIONS
-// ===========================================================================
-
-function runAllDiagnostics() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('quickActionsModal'));
-  if (modal) modal.hide();
-  
-  // Implement run all diagnostics
-  showToast('Starting diagnostics on all vehicles...', 'info');
-}
-
-function viewReports() {
-  window.location.href = '/logs';
-}
-
-function exportData() {
-  window.location.href = '/api/export/vehicles';
-}
-
-// ===========================================================================
-// TOAST NOTIFICATIONS (reusing from base.html)
-// ===========================================================================
-
-function showToast(message, type = 'info') {
-  if (window.showToast) {
-    window.showToast(message, type);
-  } else {
-    console.log(`[${type}] ${message}`);
-  }
-}
-
-// ===========================================================================
-// KEYBOARD SHORTCUTS (dashboard specific)
-// ===========================================================================
-
-document.addEventListener('keydown', (e) => {
-  // Ctrl/Cmd + F -> focus filter
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-    e.preventDefault();
-    document.getElementById('vinInput')?.focus();
-  }
-  
-  // Ctrl/Cmd + R -> reset filters
-  if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-    if (!e.shiftKey) {
-      e.preventDefault();
-      clearFilters();
-    }
-  }
-  
-  // ? -> show help
-  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    showDashboardHelp();
-  }
 });
-
-function showDashboardHelp() {
-  const help = `
-    Dashboard Shortcuts:
-    • Ctrl+F: Focus search
-    • Ctrl+R: Reset filters
-    • ?: Show this help
-    • Click column headers to sort
-    • Hover cards for more info
-  `;
-  showToast(help, 'info', 8000);
-}
-
-// ===========================================================================
-// EXPORT FUNCTIONS
-// ===========================================================================
-
-window.showVehicleInfo = showVehicleInfo;
-window.runAllDiagnostics = runAllDiagnostics;
-window.viewReports = viewReports;
-window.exportData = exportData;
-window.applyFilters = applyFilters;
-window.clearFilters = clearFilters;
 </script>
 {% endblock %}
