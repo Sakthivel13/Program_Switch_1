@@ -3,22 +3,18 @@
   "$id": "https://nirix.tvsmotor.com/schema/section.schema.json",
   "title": "Vehicle Section Tests Definition",
   "description": "Defines sections (Diagnostics/Vehicle Health) and their contents for a vehicle",
-  "version": "2.1.0",
   "type": "object",
   "required": ["vehicle", "sections"],
 
   "properties": {
     "schema_version": {
       "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "default": "2.1.0",
-      "description": "Schema version for compatibility checking"
+      "default": "1.0"
     },
 
     "vehicle": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 100,
       "description": "Vehicle model name (must match app.vehicles.name)"
     },
 
@@ -40,15 +36,12 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Display name (e.g., 'Diagnostics', 'Vehicle Health Report')"
         },
 
         "slug": {
           "type": "string",
           "pattern": "^[a-z0-9_-]+$",
-          "minLength": 1,
-          "maxLength": 100,
           "description": "URL-safe identifier"
         },
 
@@ -60,22 +53,18 @@
 
         "description": {
           "type": ["string", "null"],
-          "maxLength": 500,
           "description": "Section description"
         },
 
         "icon": {
           "type": ["string", "null"],
-          "maxLength": 100,
           "description": "Icon class or path (e.g., fa-stethoscope)"
         },
 
         "sort_order": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9999,
-          "default": 0,
-          "description": "Display order for sections"
+          "default": 0
         },
 
         "auto_run_programs": {
@@ -87,8 +76,7 @@
 
         "is_active": {
           "type": "boolean",
-          "default": true,
-          "description": "Whether this section is active"
+          "default": true
         },
 
         "ecus": {
@@ -97,8 +85,6 @@
           "items": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]+$",
-            "minLength": 1,
-            "maxLength": 50,
             "description": "ECU code reference (links to ecu_tests.json)"
           },
           "default": []
@@ -122,16 +108,12 @@
       "properties": {
         "program_id": {
           "type": "string",
-          "pattern": "^[A-Za-z0-9_-]+$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Logical program ID; also used as test_id for persistence/logging"
         },
 
         "program_name": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 100,
           "description": "Friendly name for the program"
         },
 
@@ -144,17 +126,13 @@
 
         "module_name": {
           "type": "string",
-          "pattern": "^[a-z_][a-z0-9_]*$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Python module name (without .py) inside Auto_Run or Diagnostics/Auto_Run"
         },
 
         "function_name": {
           "type": "string",
-          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Python function name inside the module"
         },
 
@@ -167,21 +145,17 @@
 
         "display_type": {
           "type": "string",
-          "enum": ["text", "value", "status", "json", "gauge", "chart"],
-          "default": "text",
-          "description": "UI hint for how to display result"
+          "description": "UI hint for how to display result (e.g., 'text', 'numeric', 'gauge', 'status')"
         },
 
         "display_label": {
           "type": "string",
-          "maxLength": 100,
           "description": "Label shown in UI (e.g., 'Battery Voltage')"
         },
 
         "display_unit": {
           "type": ["string", "null"],
-          "maxLength": 20,
-          "description": "Optional unit label (e.g., 'V', '°C', 'rpm')"
+          "description": "Optional unit label (e.g., 'V')"
         },
 
         "display_pages": {
@@ -191,9 +165,6 @@
             "type": "string",
             "enum": ["section", "ecu", "parameter"]
           },
-          "minItems": 0,
-          "maxItems": 3,
-          "uniqueItems": true,
           "default": ["section", "ecu", "parameter"]
         },
 
@@ -202,9 +173,7 @@
           "description": "List of ECU codes that this auto-run program targets (used for ECU-specific Auto_Run folders)",
           "items": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9_-]+$",
-            "minLength": 1,
-            "maxLength": 50
+            "pattern": "^[A-Za-z0-9_-]+$"
           },
           "default": []
         },
@@ -224,12 +193,9 @@
         },
 
         "fallback_input": {
-          "oneOf": [
-            { "$ref": "#/$defs/fallback_input_config" },
-            { "type": "null" }
-          ],
-          "default": null,
-          "description": "Optional config for manual input when fallback_action is 'manual_input'"
+          "description": "Optional config for manual input when fallback_action is 'manual_input'",
+          "type": ["object", "null"],
+          "additionalProperties": true
         },
 
         "log_as_vin": {
@@ -247,7 +213,6 @@
         "timeout_sec": {
           "type": "number",
           "minimum": 0,
-          "maximum": 3600,
           "default": 15,
           "description": "Timeout in seconds for this auto-run program (0 = no timeout, run indefinitely)"
         },
@@ -255,61 +220,11 @@
         "sort_order": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9999,
           "default": 0,
           "description": "Display and execution ordering for auto-run programs"
-        },
-
-        "source": {
-          "type": "string",
-          "enum": ["section", "ecu"],
-          "default": "section",
-          "description": "Source of the auto-run program (added by loader)"
         }
       },
 
-      "additionalProperties": false
-    },
-
-    "fallback_input_config": {
-      "type": "object",
-      "properties": {
-        "label": {
-          "type": "string",
-          "maxLength": 100,
-          "description": "Label for the input field"
-        },
-        "input_type": {
-          "type": "string",
-          "enum": ["string", "int", "float", "hex"],
-          "default": "string",
-          "description": "Type of input"
-        },
-        "length": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 255,
-          "description": "Required length for string/hex inputs"
-        },
-        "format_hint": {
-          "type": "string",
-          "maxLength": 200,
-          "description": "Hint text for the input format"
-        },
-        "is_required": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether input is required"
-        },
-        "default_value": {
-          "type": ["string", "null"],
-          "description": "Default value for the input"
-        },
-        "validation_pattern": {
-          "type": ["string", "null"],
-          "description": "Regex pattern for input validation"
-        }
-      },
       "additionalProperties": false
     },
 
@@ -320,9 +235,7 @@
       "properties": {
         "signal": {
           "type": "string",
-          "pattern": "^[a-zA-Z0-9_]+$",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Signal name in the program output (e.g., 'battery_voltage')"
         },
         "lsl": {
@@ -335,8 +248,7 @@
         },
         "unit": {
           "type": ["string", "null"],
-          "maxLength": 20,
-          "description": "Optional unit (e.g., 'V', '°C', 'rpm')"
+          "description": "Optional unit (e.g., 'V')"
         }
       },
 
@@ -351,21 +263,17 @@
         "folder_code": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]+$",
-          "minLength": 1,
-          "maxLength": 50,
           "description": "Maps to app.vehicle_health_folders.folder_code"
         },
 
         "folder_name": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 100,
           "description": "Tab display name - maps to folder_name"
         },
 
         "description": {
           "type": ["string", "null"],
-          "maxLength": 500,
           "description": "Tab description"
         },
 
@@ -378,14 +286,12 @@
 
         "icon": {
           "type": ["string", "null"],
-          "maxLength": 100,
           "description": "Icon class or path"
         },
 
         "sort_order": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 9999,
           "default": 0
         },
 
