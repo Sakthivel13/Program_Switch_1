@@ -5,20 +5,14 @@ Supports split auto-run programs:
 - section_tests.json: Contains VIN Read and Battery Voltage (runs on section entry)
 - ecu_tests.json: Contains ECU Active Check (runs on ECU page load)
 
-Version: 2.3.0
-Last Updated: 2026-02-20
+Version: 2.2.0
+Last Updated: 2026-02-17
 
-FIXES IN v2.3.0
+FIXES IN v2.2.0
 ────────────────
 - FIX-45: Added support for ECU-specific auto_run_programs in ecu_tests.json
 - FIX-46: Enhanced ECU status persistence for colored dots in UI
 - FIX-47: Proper separation of section-level and ECU-level auto-run programs
-- FIX-60: Source tracking for auto-run programs (section vs ecu)
-- FIX-61: Enhanced output limit validation with proper type handling
-- FIX-62: Display pages configuration support
-- FIX-63: Manual VIN fallback integration
-- FIX-64: Stream value persistence with proper schema validation
-- FIX-65: Multiple ECU status tracking
 """
 
 from __future__ import annotations
@@ -29,8 +23,8 @@ import json
 import hashlib
 import importlib.util
 from functools import lru_cache
-from typing import Dict, List, Callable, Optional, Any, Tuple, Union
-from datetime import datetime
+from typing import Dict, List, Callable, Optional, Any, Tuple
+
 
 # =============================================================================
 # EXCEPTIONS (EXPORTED FOR WEB APP COMPATIBILITY)
@@ -51,29 +45,20 @@ class FunctionNotFoundError(AttributeError):
     pass
 
 
-class SchemaValidationError(Exception):
-    """Raised when JSON schema validation fails."""
-    pass
-
-
 # =============================================================================
 # OPTIONAL DEPENDENCIES
 # =============================================================================
 
 try:
     from jsonschema import Draft202012Validator, ValidationError  # type: ignore
-    JSONSCHEMA_AVAILABLE = True
 except ImportError:
     Draft202012Validator = None
     ValidationError = Exception
-    JSONSCHEMA_AVAILABLE = False
 
 try:
     from database import query_one, query_all, execute
-    DATABASE_AVAILABLE = True
 except ImportError:
     query_one = query_all = execute = None
-    DATABASE_AVAILABLE = False
 
 
 # =============================================================================
@@ -82,7 +67,6 @@ except ImportError:
 
 CI_MODE = os.getenv("NIRIX_CI", "false").lower() == "true"
 DEBUG_MODE = os.getenv("NIRIX_DEBUG", "false").lower() == "true"
-STRICT_VALIDATION = os.getenv("NIRIX_STRICT_VALIDATION", "false").lower() == "true"
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TEST_PROGRAMS_DIR = os.path.join(BASE_DIR, "Test_Programs")
@@ -107,8 +91,7 @@ if TEST_PROGRAMS_DIR not in sys.path:
 def _log(message: str, level: str = "INFO"):
     """Simple logging helper."""
     if DEBUG_MODE or level in ("ERROR", "WARN"):
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{timestamp}][LOADER][{level}] {message}")
+        print(f"[LOADER][{level}] {message}")
 
 
 # =============================================================================
@@ -151,24 +134,9 @@ def sanitize_for_db(value: Any, max_length: int = 1000) -> Optional[str]:
 
 def _file_fingerprint(path: str) -> str:
     """Generate a fingerprint for a file based on mtime and size."""
-    try:
-        st = os.stat(path)
-        sig = f"{st.st_mtime_ns}:{st.st_size}".encode()
-        return hashlib.sha1(sig).hexdigest()
-    except Exception as e:
-        _log(f"Failed to generate fingerprint for {path}: {e}", "ERROR")
-        # Fallback to content hash if stat fails
-        return _content_fingerprint(path)
-
-
-def _content_fingerprint(path: str) -> str:
-    """Generate fingerprint from file content as fallback."""
-    try:
-        with open(path, 'rb') as f:
-            content = f.read()
-            return hashlib.sha256(content).hexdigest()[:16]
-    except Exception:
-        return datetime.now().isoformat()  # Last resort
+    st = os.stat(path)
+    sig = f"{st.st_mtime_ns}:{st.st_size}".encode()
+    return hashlib.sha1(sig).hexdigest()
 
 
 # =============================================================================
@@ -189,7 +157,7 @@ def get_vehicle_root(vehicle: str) -> str:
         if os.path.isdir(full) and normalize(d) == target:
             return full
 
-    raise VehicleNotFoundError(f"Vehicle not found: {vehicle}")
+    raise FileNotFoundError(f"Vehicle not found: {vehicle}")
 
 
 def list_all_vehicles() -> List[str]:
@@ -205,15 +173,6 @@ def list_all_vehicles() -> List[str]:
     ]
 
 
-def vehicle_exists(vehicle: str) -> bool:
-    """Check if a vehicle directory exists."""
-    try:
-        get_vehicle_root(vehicle)
-        return True
-    except VehicleNotFoundError:
-        return False
-
-
 # =============================================================================
 # SCHEMA LOADING & VALIDATION
 # =============================================================================
@@ -227,17 +186,14 @@ def _load_schema(path: str) -> Dict:
     if path not in _SCHEMA_CACHE:
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Schema file not found: {path}")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                _SCHEMA_CACHE[path] = json.load(f)
-        except json.JSONDecodeError as e:
-            raise SchemaValidationError(f"Invalid schema JSON in {path}: {e}")
+        with open(path, "r", encoding="utf-8") as f:
+            _SCHEMA_CACHE[path] = json.load(f)
     return _SCHEMA_CACHE[path]
 
 
 def _get_validator(schema_path: str):
     """Get a cached validator for a schema."""
-    if not JSONSCHEMA_AVAILABLE:
+    if Draft202012Validator is None:
         return None
     if schema_path not in _VALIDATOR_CACHE:
         schema = _load_schema(schema_path)
@@ -251,7 +207,7 @@ def validate_json(
     strict: bool = False,
 ) -> Tuple[bool, List[str]]:
     """Validate a JSON payload against a schema."""
-    if not JSONSCHEMA_AVAILABLE:
+    if Draft202012Validator is None:
         _log("jsonschema not installed, skipping validation", "WARN")
         return True, []
 
@@ -272,9 +228,9 @@ def validate_json(
         path = "/".join(map(str, e.path)) if e.path else "root"
         error_messages.append(f"{path}: {e.message}")
 
-    if strict or CI_MODE or STRICT_VALIDATION:
+    if strict or CI_MODE:
         error_str = "; ".join(error_messages)
-        raise SchemaValidationError(f"Schema validation failed: {error_str}")
+        raise ValueError(f"Schema validation failed: {error_str}")
 
     return False, error_messages
 
@@ -292,23 +248,14 @@ def load_json_file(
     if not os.path.isfile(path):
         raise FileNotFoundError(f"JSON file not found: {path}")
 
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        raise json.JSONDecodeError(f"Invalid JSON in {path}: {e.msg}", e.doc, e.pos)
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
     if schema_path:
-        try:
-            is_valid, errors = validate_json(data, schema_path, strict)
-            if not is_valid:
-                data["_schema_warnings"] = errors
-                _log(f"Schema warnings for {path}: {errors}", "WARN")
-        except SchemaValidationError as e:
-            if strict:
-                raise
-            data["_schema_errors"] = str(e)
-            _log(f"Schema validation failed for {path}: {e}", "ERROR")
+        is_valid, errors = validate_json(data, schema_path, strict)
+        if not is_valid:
+            data["_schema_warnings"] = errors
+            _log(f"Schema warnings for {path}: {errors}", "WARN")
 
     return data
 
@@ -376,8 +323,8 @@ def discover_vehicle_json_files(vehicle: str) -> Dict[str, Any]:
     """
     try:
         root = get_vehicle_root(vehicle)
-    except VehicleNotFoundError as e:
-        return {"error": f"Vehicle not found: {vehicle}", "details": str(e), "files": {}}
+    except FileNotFoundError:
+        return {"error": f"Vehicle not found: {vehicle}", "files": {}}
 
     result: Dict[str, Any] = {
         "vehicle": vehicle,
@@ -459,10 +406,7 @@ def discover_vehicle_json_files(vehicle: str) -> Dict[str, Any]:
 
 def load_section_tests(vehicle: str) -> Optional[Dict]:
     """Load section_tests.json for a vehicle with fallback paths."""
-    try:
-        root = get_vehicle_root(vehicle)
-    except VehicleNotFoundError:
-        return None
+    root = get_vehicle_root(vehicle)
 
     candidates = _get_fallback_candidates(root, SECTION_TESTS_FILENAME)
     path = _find_first_existing(candidates)
@@ -490,10 +434,7 @@ def get_section_details(vehicle: str) -> List[Dict[str, Any]]:
             "description": s.get("description", ""),
             "icon": s.get("icon", ""),
             "sort_order": s.get("sort_order", 0),
-            "auto_run_programs": _normalize_auto_run_programs(
-                s.get("auto_run_programs", []), 
-                source="section"
-            ),
+            "auto_run_programs": s.get("auto_run_programs", []),
             "is_active": s.get("is_active", True),
             "ecus": s.get("ecus", []),
             "health_tabs": s.get("health_tabs", []),
@@ -508,10 +449,7 @@ def get_section_details(vehicle: str) -> List[Dict[str, Any]]:
 
 def load_ecu_tests(vehicle: str) -> Optional[Dict]:
     """Load ecu_tests.json for a vehicle with fallback paths."""
-    try:
-        root = get_vehicle_root(vehicle)
-    except VehicleNotFoundError:
-        return None
+    root = get_vehicle_root(vehicle)
 
     candidates = _get_fallback_candidates(root, ECU_TESTS_FILENAME)
     path = _find_first_existing(candidates)
@@ -547,12 +485,8 @@ def get_ecu_details(
             "icon": ecu.get("icon", ""),
             "is_active": ecu.get("is_active", True),
             "sort_order": ecu.get("sort_order", 0),
-            # FIX-45: Include ECU-specific auto-run programs with source="ecu"
-            "auto_run_programs": _normalize_auto_run_programs(
-                ecu.get("auto_run_programs", []),
-                source="ecu",
-                ecu_targets=[ecu.get("ecu_code", "")]
-            ),
+            # FIX-45: Include ECU-specific auto-run programs
+            "auto_run_programs": ecu.get("auto_run_programs", []),
             "parameters": ecu.get("parameters", []),
         })
     return ecus
@@ -593,115 +527,6 @@ def get_ecu_auto_run_programs(vehicle: str, ecu_code: str) -> List[Dict[str, Any
 
 
 # =============================================================================
-# AUTO-RUN PROGRAM NORMALIZATION (FIX-60)
-# =============================================================================
-
-def _normalize_auto_run_programs(
-    programs: List[Dict], 
-    source: str = "section",
-    ecu_targets: List[str] = None
-) -> List[Dict[str, Any]]:
-    """
-    Normalize auto-run program definitions with consistent structure.
-    Adds source tracking and ensures required fields.
-    
-    Args:
-        programs: Raw program definitions from JSON
-        source: "section" or "ecu" - where the program came from
-        ecu_targets: List of ECU codes this program targets
-    
-    Returns:
-        Normalized program definitions
-    """
-    if not programs:
-        return []
-    
-    normalized = []
-    ecu_targets = ecu_targets or []
-    
-    for prog in programs:
-        program_id = prog.get("program_id", "")
-        if not program_id:
-            _log(f"Auto-run program missing program_id, skipping", "WARN")
-            continue
-        
-        # Ensure display_pages is a list
-        display_pages = prog.get("display_pages", ["section", "ecu", "parameter"])
-        if isinstance(display_pages, str):
-            display_pages = [display_pages]
-        
-        # Ensure output_limits is properly structured
-        output_limits = prog.get("output_limits", [])
-        if output_limits and isinstance(output_limits, list):
-            output_limits = [_normalize_output_limit(lim) for lim in output_limits if lim]
-        
-        # Build normalized program
-        normalized.append({
-            "program_id": program_id,
-            "program_name": prog.get("program_name", program_id),
-            "program_type": prog.get("program_type", "single"),
-            "module_name": prog.get("module_name"),
-            "function_name": prog.get("function_name"),
-            "execution_mode": _map_execution_mode(prog.get("execution_mode", "single")),
-            "display_type": prog.get("display_type", "text"),
-            "display_label": prog.get("display_label", program_id),
-            "display_unit": prog.get("display_unit"),
-            "display_pages": display_pages,
-            "ecu_targets": prog.get("ecu_targets", ecu_targets),
-            "output_limits": output_limits,
-            "fallback_action": prog.get("fallback_action", "none"),
-            "fallback_input": prog.get("fallback_input"),
-            "log_as_vin": prog.get("log_as_vin", False),
-            "is_required": prog.get("is_required", True),
-            "timeout_sec": prog.get("timeout_sec", 15),
-            "sort_order": prog.get("sort_order", 0),
-            "source": source,  # FIX-60: Track source
-        })
-    
-    return normalized
-
-
-def _normalize_output_limit(limit: Dict) -> Dict[str, Any]:
-    """Normalize output limit definition."""
-    if not limit or not isinstance(limit, dict):
-        return {}
-    
-    signal = limit.get("signal", "")
-    if not signal:
-        return {}
-    
-    return {
-        "signal": signal,
-        "lsl": _safe_float(limit.get("lsl")),
-        "usl": _safe_float(limit.get("usl")),
-        "unit": limit.get("unit"),
-    }
-
-
-def _safe_float(value: Any) -> Optional[float]:
-    """Safely convert value to float."""
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _map_execution_mode(mode: str) -> str:
-    """Map execution mode from JSON to SQL enum values."""
-    mode_lower = (mode or "single").lower().strip()
-    mapping = {
-        "stream": "stream",
-        "single": "single",
-        "flash": "flashing",
-        "flashing": "flashing",
-        "live": "stream",  # Treat live as stream
-    }
-    return mapping.get(mode_lower, "single")
-
-
-# =============================================================================
 # TESTS JSON LOADER
 # =============================================================================
 
@@ -712,10 +537,7 @@ def load_tests_json(
     ecu: Optional[str] = None,
 ) -> Optional[Dict]:
     """Load tests.json for a specific parameter."""
-    try:
-        root = get_vehicle_root(vehicle)
-    except VehicleNotFoundError:
-        return None
+    root = get_vehicle_root(vehicle)
 
     if section == "diagnostics":
         if not ecu:
@@ -744,30 +566,7 @@ def get_tests_for_parameter(
     data = load_tests_json(vehicle, section, parameter, ecu)
     if not data or "tests" not in data:
         return []
-    
-    tests = []
-    for test in data["tests"]:
-        # Normalize test definition
-        normalized = {
-            "id": test.get("id", ""),
-            "label": test.get("label", ""),
-            "description": test.get("description", ""),
-            "module_name": test.get("module_name", ""),
-            "function_name": test.get("function_name", ""),
-            "button_name": test.get("button_name", "Run"),
-            "parameter_page_type": test.get("parameter_page_type", "LIVE_PARAMETER"),
-            "function_role": test.get("function_role"),
-            "version": test.get("version", "1.0"),
-            "is_active": test.get("is_active", True),
-            "sort_order": test.get("sort_order", 0),
-            "inputs": test.get("inputs", []),
-            "output_limits": [_normalize_output_limit(lim) for lim in test.get("output_limits", [])],
-            "execution": test.get("execution", {}),
-            "flashing": test.get("flashing"),
-        }
-        tests.append(normalized)
-    
-    return tests
+    return data["tests"]
 
 
 # =============================================================================
@@ -796,7 +595,7 @@ def discover_vehicle_sections(vehicle: str) -> Dict[str, bool]:
         result["vehicle_health"] = os.path.isdir(
             os.path.join(root, "Vehicle_Health_Report")
         )
-    except (VehicleNotFoundError, FileNotFoundError):
+    except FileNotFoundError:
         pass
 
     return result
@@ -829,7 +628,7 @@ def discover_ecus(vehicle: str) -> List[Dict[str, Any]]:
             if os.path.isdir(os.path.join(diag_dir, d))
             and not d.startswith(".")
         ]
-    except (VehicleNotFoundError, FileNotFoundError):
+    except FileNotFoundError:
         return []
 
 
@@ -858,7 +657,7 @@ def discover_parameters(vehicle: str, ecu_code: str) -> List[Dict[str, Any]]:
             if os.path.isdir(os.path.join(ecu_dir, d))
             and not d.startswith(".")
         ]
-    except (VehicleNotFoundError, FileNotFoundError):
+    except FileNotFoundError:
         return []
 
 
@@ -905,7 +704,7 @@ def discover_health_tabs(vehicle: str) -> List[Dict[str, Any]]:
             if os.path.isdir(os.path.join(vh_dir, d))
             and not d.startswith(".")
         ]
-    except (VehicleNotFoundError, FileNotFoundError):
+    except FileNotFoundError:
         return []
 
 
@@ -1022,7 +821,7 @@ def load_test_function(
     """Load a test function from the filesystem."""
     try:
         root = get_vehicle_root(vehicle)
-    except VehicleNotFoundError as e:
+    except FileNotFoundError as e:
         raise VehicleNotFoundError(str(e)) from e
 
     sec = (section or "").lower().strip()
@@ -1042,12 +841,7 @@ def load_test_function(
 
     module_path = os.path.join(base, f"{safe_name(module_name)}.py")
     if not os.path.isfile(module_path):
-        # Try alternative naming (some modules have different case)
-        alt_path = os.path.join(base, f"{module_name}.py")
-        if os.path.isfile(alt_path):
-            module_path = alt_path
-        else:
-            raise ModuleLoadError(f"Module not found: {module_path}")
+        raise ModuleLoadError(f"Module not found: {module_path}")
 
     fingerprint = _file_fingerprint(module_path)
     return _load_cached_function(module_path, function_name, fingerprint)
@@ -1071,7 +865,7 @@ def register_definition_version(
     source: str,
 ) -> bool:
     """Register a test definition version in the database."""
-    if not DATABASE_AVAILABLE or execute is None:
+    if execute is None:
         _log("Database not available, skipping version registration", "WARN")
         return False
 
@@ -1097,6 +891,34 @@ def register_definition_version(
     except Exception as e:
         _log(f"Failed to register definition version: {e}", "ERROR")
         return False
+
+
+# =============================================================================
+# TYPE MAPPINGS
+# =============================================================================
+
+def _map_execution_mode(mode: str) -> str:
+    """Map execution mode from JSON to SQL enum values."""
+    mode_lower = (mode or "single").lower().strip()
+    mapping = {
+        "stream": "stream",
+        "single": "single",
+        "flash": "flashing",
+        "flashing": "flashing",
+        "live": "live",
+    }
+    return mapping.get(mode_lower, "single")
+
+
+def _map_execution_class_to_mode(exec_class: str) -> str:
+    """Map execution_class to execution_mode."""
+    mapping = {
+        "STREAM": "stream",
+        "SINGLE": "single",
+        "FLASH": "flashing",
+        "DUAL": "stream",
+    }
+    return mapping.get(exec_class, "single")
 
 
 # =============================================================================
@@ -1157,7 +979,7 @@ def _to_jsonb_or_empty_array(value: Any) -> str:
 
 def _ensure_indexes():
     """Create necessary indexes for performance if they don't exist."""
-    if not DATABASE_AVAILABLE or execute is None:
+    if execute is None:
         return
     
     try:
@@ -1169,11 +991,6 @@ def _ensure_indexes():
         execute("""
             CREATE INDEX IF NOT EXISTS idx_tests_section_parameter 
             ON app.tests(section, parameter)
-        """)
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_tests_composite_lookup
-            ON app.tests(vehicle_id, section, ecu, parameter)
-            WHERE is_active = true
         """)
         
         # Indexes for test_inputs
@@ -1200,12 +1017,6 @@ def _ensure_indexes():
             ON app.diagnostic_folders(ecu_code)
         """)
         
-        # GIN index for JSONB queries on auto_run_programs
-        execute("""
-            CREATE INDEX IF NOT EXISTS idx_vehicle_diagnostic_actions_auto_run_gin 
-            ON app.vehicle_diagnostic_actions USING gin(auto_run_programs)
-        """)
-        
         _log("Database indexes ensured", "INFO")
     except Exception as e:
         _log(f"Failed to create indexes: {e}", "WARN")
@@ -1225,7 +1036,7 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
     3. Loads ecu_tests.json → syncs ECUs + parameters + ECU-specific auto-run programs
     4. Walks all tests.json files → syncs test definitions
     """
-    if not DATABASE_AVAILABLE or query_all is None or execute is None:
+    if query_all is None or execute is None:
         raise RuntimeError("Database helpers not available")
 
     # Ensure indexes exist before syncing
@@ -1296,8 +1107,6 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
                     "ERROR",
                 )
                 stats["errors"] += 1
-                if strict:
-                    raise
 
             # ── ecu_tests.json (ECU-level auto-run programs) ──
             _log(f"  Loading {ECU_TESTS_FILENAME}")
@@ -1321,8 +1130,6 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
                     "ERROR",
                 )
                 stats["errors"] += 1
-                if strict:
-                    raise
 
             # ── All tests.json files ──
             root = get_vehicle_root(vehicle_name)
@@ -1340,7 +1147,7 @@ def sync_tests_from_filesystem(strict: bool = False) -> Dict[str, int]:
 
 def _ensure_global_diagnostic_sections():
     """Ensure global diagnostic section definitions exist."""
-    if not DATABASE_AVAILABLE or execute is None:
+    if execute is None:
         return
 
     sections = [
@@ -1443,10 +1250,7 @@ def _sync_sections_to_db(vehicle_id: int, data: Dict, stats: Dict):
             stats["sections_created"] += 1
 
         # ── Sync section-level auto-run programs (VIN, Battery Voltage) ──
-        auto_run = _normalize_auto_run_programs(
-            section.get("auto_run_programs", []),
-            source="section"
-        )
+        auto_run = section.get("auto_run_programs", [])
         _sync_auto_run_programs_to_db(
             vehicle_id, section_id, auto_run, stats
         )
@@ -1471,7 +1275,46 @@ def _sync_auto_run_programs_to_db(
     """
     Sync auto-run program config to vehicle_section_map as jsonb.
     """
-    auto_json = _to_jsonb_or_empty_array(programs)
+    normalized = []
+
+    for prog in programs:
+        pid = prog.get("program_id", "")
+        if not pid:
+            _log("    Auto-run program missing program_id, skipping", "WARN")
+            continue
+
+        norm = {
+            "program_id": pid,
+            "program_name": prog.get("program_name", pid),
+            "program_type": prog.get("program_type", "single"),
+            "module_name": prog.get("module_name"),
+            "function_name": prog.get("function_name"),
+            "execution_mode": _map_execution_mode(
+                prog.get("execution_mode", "single")
+            ),
+            "display_type": prog.get("display_type", "text"),
+            "display_label": prog.get("display_label", pid),
+            "display_unit": prog.get("display_unit"),
+            "display_pages": prog.get(
+                "display_pages", ["section", "ecu", "parameter"]
+            ),
+            "ecu_targets": prog.get("ecu_targets", []),
+            "output_limits": prog.get("output_limits", []),
+            "fallback_action": prog.get("fallback_action", "none"),
+            "fallback_input": prog.get("fallback_input"),
+            "log_as_vin": prog.get("log_as_vin", False),
+            "is_required": prog.get("is_required", True),
+            "timeout_sec": prog.get("timeout_sec", 15),
+            "sort_order": prog.get("sort_order", 0),
+        }
+
+        normalized.append(norm)
+        _log(
+            f"    Auto-run: {pid} "
+            f"({norm['program_type']}, {norm['display_type']})"
+        )
+
+    auto_json = json.dumps(normalized) if normalized else "[]"
 
     execute("""
         INSERT INTO app.vehicle_section_map
@@ -1485,9 +1328,6 @@ def _sync_auto_run_programs_to_db(
         "sid": section_id,
         "auto": auto_json,
     })
-    
-    if programs:
-        _log(f"    Synced {len(programs)} auto-run programs for section {section_id}")
 
 
 # =============================================================================
@@ -1649,11 +1489,7 @@ def _sync_ecus_to_db(vehicle_id: int, data: Dict, stats: Dict):
         _log(f"  Processing ECU: {ecu_code}")
 
         # Get ECU-specific auto-run programs (FIX-45)
-        ecu_auto_run = _normalize_auto_run_programs(
-            ecu.get("auto_run_programs", []),
-            source="ecu",
-            ecu_targets=[ecu_code]
-        )
+        ecu_auto_run = ecu.get("auto_run_programs", [])
 
         # Upsert diagnostic_folders (global ECU definition)
         global_folder = query_one("""
@@ -1717,8 +1553,6 @@ def _sync_ecus_to_db(vehicle_id: int, data: Dict, stats: Dict):
             WHERE vehicle_id = :vid AND ecu_code = :code
         """, {"vid": vehicle_id, "code": ecu_code})
 
-        auto_run_json = _to_jsonb(ecu_auto_run) if ecu_auto_run else None
-
         if vehicle_ecu:
             execute("""
                 UPDATE app.vehicle_diagnostic_actions SET
@@ -1728,8 +1562,7 @@ def _sync_ecus_to_db(vehicle_id: int, data: Dict, stats: Dict):
                     emission    = :emission,
                     is_active   = :active,
                     sort_order  = :sort,
-                    auto_run_programs = :auto_run,
-                    updated_at = CURRENT_TIMESTAMP
+                    auto_run_programs = :auto_run  -- FIX-45: Store ECU auto-run programs
                 WHERE id = :id
             """, {
                 "id": vehicle_ecu["id"],
@@ -1739,10 +1572,9 @@ def _sync_ecus_to_db(vehicle_id: int, data: Dict, stats: Dict):
                 "emission": ecu.get("emission"),
                 "active": ecu.get("is_active", True),
                 "sort": ecu.get("sort_order", 0),
-                "auto_run": auto_run_json,
+                "auto_run": _to_jsonb(ecu_auto_run) if ecu_auto_run else None,
             })
-            if ecu_auto_run:
-                stats["ecu_auto_run_programs_synced"] += len(ecu_auto_run)
+            stats["ecu_auto_run_programs_synced"] += 1 if ecu_auto_run else 0
         else:
             execute("""
                 INSERT INTO app.vehicle_diagnostic_actions
@@ -1764,10 +1596,10 @@ def _sync_ecus_to_db(vehicle_id: int, data: Dict, stats: Dict):
                 "emission": ecu.get("emission"),
                 "active": ecu.get("is_active", True),
                 "sort": ecu.get("sort_order", 0),
-                "auto_run": auto_run_json,
+                "auto_run": _to_jsonb(ecu_auto_run) if ecu_auto_run else None,
             })
             if ecu_auto_run:
-                stats["ecu_auto_run_programs_synced"] += len(ecu_auto_run)
+                stats["ecu_auto_run_programs_synced"] += 1
 
         # Sync parameters
         params = ecu.get("parameters", [])
@@ -2061,8 +1893,8 @@ def _sync_test_output_limits(test_id: str, limits: List[Dict]):
         """, {
             "test_id": test_id,
             "signal": signal,
-            "lsl": _safe_float(lim.get("lsl")),
-            "usl": _safe_float(lim.get("usl")),
+            "lsl": lim.get("lsl"),
+            "usl": lim.get("usl"),
             "unit": lim.get("unit"),
         })
 
@@ -2145,7 +1977,7 @@ def get_auto_run_config(
     Returns list of auto-run program objects with full metadata.
     """
     # Try database first
-    if DATABASE_AVAILABLE and query_one is not None:
+    if query_one is not None:
         try:
             db_vehicle = query_one("""
                 SELECT v.id
@@ -2176,10 +2008,7 @@ def get_auto_run_config(
                     if mapping and mapping.get("auto_run_programs"):
                         programs = mapping["auto_run_programs"]
                         if isinstance(programs, str):
-                            try:
-                                programs = json.loads(programs)
-                            except json.JSONDecodeError:
-                                programs = []
+                            programs = json.loads(programs)
                         if programs:
                             return programs
 
@@ -2199,7 +2028,7 @@ def get_ecu_auto_run_config(
     These run when the ECU page loads (e.g., ECU Active Check).
     """
     # Try database first
-    if DATABASE_AVAILABLE and query_one is not None:
+    if query_one is not None:
         try:
             db_vehicle = query_one("""
                 SELECT v.id
@@ -2221,10 +2050,7 @@ def get_ecu_auto_run_config(
                 if ecu_action and ecu_action.get("auto_run_programs"):
                     programs = ecu_action["auto_run_programs"]
                     if isinstance(programs, str):
-                        try:
-                            programs = json.loads(programs)
-                        except json.JSONDecodeError:
-                            programs = []
+                        programs = json.loads(programs)
                     if programs:
                         return programs
 
@@ -2323,7 +2149,7 @@ def get_vehicle_info(vehicle: str) -> Dict[str, Any]:
     """Get comprehensive info about a vehicle's test configuration."""
     try:
         root = get_vehicle_root(vehicle)
-    except VehicleNotFoundError as e:
+    except FileNotFoundError as e:
         return {"error": f"Vehicle not found: {vehicle}", "details": str(e)}
 
     info: Dict[str, Any] = {
@@ -2361,7 +2187,7 @@ def reload_vehicle_tests(
     strict: bool = False,
 ) -> Dict[str, int]:
     """Reload tests for a specific vehicle."""
-    if not DATABASE_AVAILABLE or query_one is None or execute is None:
+    if query_one is None or execute is None:
         raise RuntimeError("Database helpers not available")
 
     db_vehicle = query_one("""
@@ -2436,7 +2262,7 @@ def get_sections_from_json(vehicle: str) -> List[Dict[str, Any]]:
     """Compatibility wrapper for section details."""
     try:
         return get_section_details(vehicle)
-    except VehicleNotFoundError as e:
+    except FileNotFoundError as e:
         raise VehicleNotFoundError(str(e))
 
 
@@ -2444,7 +2270,7 @@ def get_ecus_from_json(vehicle: str) -> List[Dict[str, Any]]:
     """Compatibility wrapper for ECU details."""
     try:
         return get_ecu_details(vehicle)
-    except VehicleNotFoundError as e:
+    except FileNotFoundError as e:
         raise VehicleNotFoundError(str(e))
 
 
@@ -2455,7 +2281,7 @@ def get_parameters_from_json(
     """Compatibility wrapper for parameter details."""
     try:
         return get_parameter_details(vehicle, ecu_code)
-    except VehicleNotFoundError as e:
+    except FileNotFoundError as e:
         raise VehicleNotFoundError(str(e))
 
 
@@ -2469,7 +2295,7 @@ def get_auto_run_programs(
     """
     try:
         data = load_section_tests(vehicle)
-    except VehicleNotFoundError as e:
+    except FileNotFoundError as e:
         raise VehicleNotFoundError(str(e))
 
     if not data or "sections" not in data:
@@ -2484,7 +2310,39 @@ def get_auto_run_programs(
             continue
 
         programs = section.get("auto_run_programs", []) or []
-        return _normalize_auto_run_programs(programs, source="section")
+
+        normalized: List[Dict[str, Any]] = []
+        for p in programs:
+            pid = p.get("program_id", "")
+            if not pid:
+                continue
+
+            normalized.append({
+                "program_id": pid,
+                "program_name": p.get("program_name", pid),
+                "program_type": p.get("program_type", "single"),
+                "module_name": p.get("module_name"),
+                "function_name": p.get("function_name"),
+                "execution_mode": _map_execution_mode(
+                    p.get("execution_mode", "single")
+                ),
+                "display_type": p.get("display_type", "text"),
+                "display_label": p.get("display_label", pid),
+                "display_unit": p.get("display_unit"),
+                "display_pages": p.get(
+                    "display_pages", ["section", "ecu", "parameter"]
+                ),
+                "ecu_targets": p.get("ecu_targets", []),
+                "output_limits": p.get("output_limits", []),
+                "fallback_action": p.get("fallback_action", "none"),
+                "fallback_input": p.get("fallback_input"),
+                "log_as_vin": p.get("log_as_vin", False),
+                "is_required": p.get("is_required", True),
+                "timeout_sec": p.get("timeout_sec", 15),
+                "sort_order": p.get("sort_order", 0),
+            })
+
+        return normalized
 
     return []
 
@@ -2522,7 +2380,6 @@ __all__ = [
     "VehicleNotFoundError",
     "ModuleLoadError",
     "FunctionNotFoundError",
-    "SchemaValidationError",
 
     # Core loaders
     "load_test_function",
@@ -2532,7 +2389,7 @@ __all__ = [
     "get_parameters_from_json",
     "get_auto_run_programs",
     "get_auto_run_config",
-    "get_ecu_auto_run_config",
+    "get_ecu_auto_run_config",  # NEW: Get ECU-specific auto-run programs
     "get_tests_for_parameter",
 
     # Discovery
@@ -2542,7 +2399,6 @@ __all__ = [
     "discover_parameters",
     "discover_health_tabs",
     "list_all_vehicles",
-    "vehicle_exists",
 
     # Database sync
     "sync_tests_from_filesystem",
@@ -2557,6 +2413,4 @@ __all__ = [
     "clear_function_cache",
     "safe_name",
     "normalize",
-    "compute_content_hash",
-    "register_definition_version",
 ]
